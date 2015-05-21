@@ -20,8 +20,6 @@ while(<IN>) {
   chomp;
   my $json = decode_json($_);
 
-  next if ($json->{dcc_project_code} ne $project_code);
-
   #print Dumper $json;
 
   if (defined ($json->{normal_specimen}{alignment}{timing_metrics})) {
@@ -37,6 +35,7 @@ while(<IN>) {
       $norm_download_timing_seconds = $hash->{metrics}{bwa_timing_seconds};
     }
 
+    # TODO: make this print to file
     print "NORM\t$norm_merge_timing_seconds\t$norm_bwa_timing_seconds\t$norm_download_timing_seconds\n";
 
   }
