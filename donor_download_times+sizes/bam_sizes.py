@@ -24,7 +24,7 @@ for donor in donors:
 		data[d] = { 'size': 0, 'repo': "?" }
 	bamfiles = j['_source']['bam_files']
 	for bam in bamfiles:
-		if bam['is_aligned'] is True:
+		if bam['is_aligned'] is False:
 			continue
 	        data_key = ""	
 		if bam['use_cntl'] == "N/A":

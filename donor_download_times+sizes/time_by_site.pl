@@ -17,14 +17,13 @@ open IN, "<ICGC_only_donor_p_150520020206.jsonl" or die;
 
 open(my $fh, '>', 'data/ICGC_time_by_site.txt');
 
-print $fh "TYPE\tPROJECT_CODE\tDONOR_ID\tMERGE_TIME\tBWA_TIME\tDOWN_TIME\tQC_TIME\tGNOS_REPO\n";
+print $fh "TYPE\tDONOR_UNIQUE_ID\tMERGE_TIME\tBWA_TIME\tDOWN_TIME\tQC_TIME\tGNOS_REPO\n";
 
 while(<IN>) {
   chomp;
   my $json = decode_json($_);
 
-  my $project_code = $json->{dcc_project_code};
-  my $donor_id = $json->{submitter_donor_id};
+  my $donor_unique_id = $json->{donor_unique_id};
   #print Dumper $json;
 
   if (defined ($json->{normal_specimen}{alignment}{timing_metrics})) {
@@ -52,7 +51,7 @@ while(<IN>) {
     }
 
     # print to file
-    print $fh "NORM\t$project_code\t$donor_id\t$norm_merge_timing_seconds\t$norm_bwa_timing_seconds\t$norm_download_timing_seconds\t$norm_qc_timing_seconds\t$normal_gnos_repo\n";
+    print $fh "NORM\t$donor_unique_id\t$norm_merge_timing_seconds\t$norm_bwa_timing_seconds\t$norm_download_timing_seconds\t$norm_qc_timing_seconds\t$normal_gnos_repo\n";
 
   }
 
@@ -83,7 +82,7 @@ while(<IN>) {
 
       }
 
-      print $fh "TUMOR\t$project_code\t$donor_id\t$tumor_merge_timing_seconds\t$tumor_bwa_timing_seconds\t$tumor_download_timing_seconds\t$tumor_qc_timing_seconds\t$gnos_repo\n";
+      print $fh "TUMOR\t$donor_unique_id\t$tumor_merge_timing_seconds\t$tumor_bwa_timing_seconds\t$tumor_download_timing_seconds\t$tumor_qc_timing_seconds\t$gnos_repo\n";
       # show progress
       print "."
 
