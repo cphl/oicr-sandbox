@@ -4,6 +4,11 @@ import sys
 import boto
 from boto import ec2
 
+volumes_data_output_file = "volumes.tsv"
+snapshots_data_output_file = "snapshots.tsv"
+instances_data_output_file = "instances.tsv"
+
+
 def credentials():
     return {"aws_access_key_id": os.environ['AWS_ACCESS_KEY'],
             "aws_secret_access_key": os.environ['AWS_SECRET_KEY']}
@@ -65,41 +70,68 @@ def getGroups(instance):
     return groupList
 
 #TODO: add time-passed since launch (in lieu of time tagless)
-
-#TODO: write directly to file
-
-
+#TODO: add AMIs
+#TODO: have AMIs-snaps, ins-vols mapped such that tagging lhs propagates to rhs
+#TODO: have this stuff accessible from s3, public url
 
 def main ():
     regions = getRegions()
 
-    # Print volumes
-    print "\n+ VOLUMES +"
-    print "volume_ID\tstate\tsize\ttime_stamp_volume_created\tregion(zone)\tsnapshot ID"
-    for r in regions:
-        volumes = getVolumes(r)
-        for v in volumes:
-            print "%s\t%s\t%s GB\t%s\t%s\t%s" % (v.id, v.status, v.size, v.create_time, v.zone, v.snapshot_id)
+#    # Print volumes to screen
+#    print "\n+ VOLUMES +"
+#    print "volume_ID\tstate\tsize\ttime_stamp_volume_created\tregion(zone)\tsnapshot ID"
+#    for r in regions:
+#        volumes = getVolumes(r)
+#        for v in volumes:
+#            print "%s\t%s\t%s GB\t%s\t%s\t%s" % (v.id, v.status, v.size, v.create_time, v.zone, v.snapshot_id)
+
+    # Write to file
+    print "\nWriting volumes info to output file %s" % volumes_data_output_file
+    with open(volumes_data_output_file, 'w') as f1:
+        f1.write("VOLUMES\n")
+        f1.write("volume_ID\tstate\tsize[GB]\ttime_stamp_volume_created\tregion(zone)\tsnapshot ID\n")
+        for r in regions:
+            volumes = getVolumes(r)
+            print "."  #give some feedback to the user
+            for v in volumes:
+                f1.write ("%s\t%s\t%s\t%s\t%s\t%s\n" % (v.id, v.status, v.size, v.create_time, v.zone, v.snapshot_id))
 
     # Snapshots
-    print "\n+ SNAPSHOTS +"
+    print "Writing snapshots info to output file %s" % snapshots_data_output_file
     snapshots = []
-#    import pdb; pdb.set_trace()
     for r in regions:
         snapshots += getSnapshots(r)
+        print "."  #feedback for the user
 
-    print "snapshot_id\tstatus\tregion(availability_zone)\tprogress\tstart_date_time_stamp\tvolume_id\tvolume_size\tKEEP-tag"
+#    # Print snapshots to screen
+#    print "\n+ SNAPSHOTS +"
+#    print "snapshot_id\tstatus\tregion(availability_zone)\tprogress\tstart_date_time_stamp\tvolume_id\tvolume_size\tKEEP-tag"
+#    for s in snapshots:
+#           print "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (s.id, s.status, s.region, s.progress, s.start_time, s.volume_id, s.volume_size, getKeepTag(s))
 
-    for s in snapshots:
-           print "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (s.id, s.status, s.region, s.progress, s.start_time, s.volume_id, s.volume_size, getKeepTag(s))
+    with open(snapshots_data_output_file, 'w') as f2:
+        f2.write("SNAPSHOTS\n")
+        f2.write("snapshot_id\tstatus\tregion(availability_zone)\tprogress\tstart_date_time_stamp\tvolume_id\tvolume_size\tKEEP-tag\n")
+        for s in snapshots:
+            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (s.id, s.status, s.region, s.progress, s.start_time, s.volume_id, s.volume_size, getKeepTag(s)))       
 
-    # Instances
-    print "\n+ INSTANCES +"
-    print "instance ID\tinstance_type\tstate\ttime_stamp_instance_launched\tsecurity_groups(list?)\tKEEP-tag"
-    for region in regions:
-        instances = getInstances(region)
-        for i in instances:
-            print "%s\t%s\t%s\t%s\t%s\t%s" % (i.id, i.instance_type, i.state, i.launch_time, getGroups(i), getKeepTag(i))
+    # Print instances to screen
+#    print "\n+ INSTANCES +"
+#    print "instance ID\tinstance_type\tstate\ttime_stamp_instance_launched\tsecurity_groups(list?)\tKEEP-tag"
+#    for region in regions:
+#        instances = getInstances(region)
+#        for i in instances:
+#            print "%s\t%s\t%s\t%s\t%s\t%s" % (i.id, i.instance_type, i.state, i.launch_time, getGroups(i), getKeepTag(i))
+
+    print "Writing instances info to output file %s" % instances_data_output_file
+    with open(instances_data_output_file, 'w') as f3:
+        f3.write("INSTANCES\n")
+        f3.write("instance ID\tinstance_type\tstate\ttime_stamp_instance_launched\tsecurity_groups(list?)\tKEEP-tag\n")
+        for region in regions:
+            print "."  #feedback for user
+            instances = getInstances(region)
+            for i in instances:
+                f3.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (i.id, i.instance_type, i.state, i.launch_time, getGroups(i), getKeepTag(i)))
 
 
 if __name__ == '__main__':
