@@ -37,9 +37,21 @@ def getRegions():
         region_names.append(region.name)
     return region_names
 
-def getTag(instance):
+# snapshots got this thing where there are public, private, and owned by me
+# we're interested in the ones owned by us, so select those with 'owner_id' = 794321122735
+# I think I can use 'self' as a parameter to get_all_snapshots() too
+def getSnapshots(region):
+    creds = credentials()
     try:
-        tag = instance.tags['KEEP']
+        conn = ec2.connect_to_region(region, **creds)
+        snapshots = conn.get_all_snapshots(owner='self')
+    except boto.exception.EC2ResponseError:
+        return []
+    return snapshots
+
+def getKeepTag(obj):
+    try:
+        tag = obj.tags['KEEP']
     except:
         #TODO: double-check with web console that empty strings and non-existent KEEP-tags match
         return "no tag with key 'KEEP'"
@@ -48,36 +60,46 @@ def getTag(instance):
 def getGroups(instance):
     groupList = []
     for g in instance.groups:
-        #TODO: make output prettier?
+        #TODO: make output prettier? It's just stringifying a list right now.
         groupList.append(g.name)
     return groupList
+
+#TODO: add time-passed since launch (in lieu of time tagless)
+
+#TODO: write directly to file
+
+
 
 def main ():
     regions = getRegions()
 
-    # Volumes
-#    print "\nVolumes volumes volumes!!!!"
-#    print "volume_ID\tstate\tsize\ttime_stamp_volume_created\tzone\tsnapshot ID"
-#    for r in regions:
-#        volumes = getVolumes(r)
-#        for v in volumes:
-#            print "%s\t%s\t%s GB\t%s\t%s\t%s" % (v.id, v.status, v.size, v.create_time, v.zone, v.snapshot_id)
+    # Print volumes
+    print "\n+ VOLUMES +"
+    print "volume_ID\tstate\tsize\ttime_stamp_volume_created\tregion(zone)\tsnapshot ID"
+    for r in regions:
+        volumes = getVolumes(r)
+        for v in volumes:
+            print "%s\t%s\t%s GB\t%s\t%s\t%s" % (v.id, v.status, v.size, v.create_time, v.zone, v.snapshot_id)
 
     # Snapshots
-    print "\nSnapshots: What's a snapshot? I...what?"
+    print "\n+ SNAPSHOTS +"
+    snapshots = []
+#    import pdb; pdb.set_trace()
+    for r in regions:
+        snapshots += getSnapshots(r)
+
+    print "snapshot_id\tstatus\tregion(availability_zone)\tprogress\tstart_date_time_stamp\tvolume_id\tvolume_size\tKEEP-tag"
+
+    for s in snapshots:
+           print "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (s.id, s.status, s.region, s.progress, s.start_time, s.volume_id, s.volume_size, getKeepTag(s))
 
     # Instances
-    print "\nInstances!!!!!"
-    print "instance ID\tinstance_type\tstate\ttime_stamp_instance_launched\tgroups\tKEEP-tag"
+    print "\n+ INSTANCES +"
+    print "instance ID\tinstance_type\tstate\ttime_stamp_instance_launched\tsecurity_groups(list?)\tKEEP-tag"
     for region in regions:
         instances = getInstances(region)
         for i in instances:
-
-            # do something for every instance we have
-            # groups is a list of things where you gotta do element.name
-
-
-            print "%s\t%s\t%s\t%s\t%s\t%s" % (i.id, i.instance_type, i.state, i.launch_time, getGroups(i), getTag(i))
+            print "%s\t%s\t%s\t%s\t%s\t%s" % (i.id, i.instance_type, i.state, i.launch_time, getGroups(i), getKeepTag(i))
 
 
 if __name__ == '__main__':
