@@ -54,14 +54,13 @@ def getSnapshots(region):
         return []
     return snapshots
 
-"""Return images for one given region, owned by self
-"""
+"""Return images for one given region, owned by self"""
 def getImages(region):
     creds = credentials()
     try:
         conn = ec2.connect_to_region(region, **creds)
         images = conn.get_all_images(owners='self')
-    except boto.exceptions.EC2ResponseError:
+    except boto.exception.EC2ResponseError:
         return []
     return images
 
@@ -151,21 +150,29 @@ def generateInfoInstances(regions):
 
 def generateInfoImages(regions):
     print "Writing images info to output file %s" % images_data_output_file
-    #stub
+    with open(images_data_output_file, 'w') as f4:
+        f4.write("IMAGES\n")
+        f4.write("image_name\timage_id\tregion\tstate\tcreation_date\ttype\tKEEP-tag\tdescription\n")
+        for r in regions:
+            print "."  #feedback for user
+            images = getImages(r)
+            for im in images:
+                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                        % (im.name, im.id, im.region, im.state, im.creationDate, im.type, getKeepTag(im), im.description) )
+
 
 
 #TODO: add time-passed since launch (in lieu of time tagless)
 #TODO: add AMIs
 #TODO: have AMIs-snaps, ins-vols mapped such that tagging lhs propagates to rhs
 #TODO: have this stuff accessible from s3, public url
-#TODO: make print/output functions so it isn't such a mess in main()
 
 def main ():
     regions = getRegions()
-
-    generateInfoVolumes(regions)
-    generateInfoSnapshots(regions)
-    generateInfoInstances(regions)
+#    import pdb; pdb.set_trace()
+#    generateInfoVolumes(regions)
+#    generateInfoSnapshots(regions)
+#    generateInfoInstances(regions)
     generateInfoImages(regions)
 
 """
