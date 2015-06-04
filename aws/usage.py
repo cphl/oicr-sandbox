@@ -89,6 +89,7 @@ def getImagesD(region):
                      "created":     im.creationDate,
                      "type":        im.type,
                      "KEEP":        getKeepTag(im),
+                     "snapshots":   getSnapshotsOf(im),
                      "description": im.description
         }
         imageDicts.append(imageDict)
@@ -96,20 +97,43 @@ def getImagesD(region):
 
 def getSnapshotsD(region):
     """ return a list of dictionaries representing snapshots from one region """
+    ### Can a snapshot belong to more than one AMI? Dunno, keep list just in case
     snapshots = getSnapshots(region)
     snapshotsDicts = []
     for s in snapshots:
-        snapshotsDict = {"id":          s.id,
-                         "status":      s.status,
-                         "region":      s.region.name,
-                         "progress":    s.progress,
-                         "start_time":  s.start_time,
-                         "volume_id":   s.volume_id,
-                         "volume_size": s.volume_size,
-                         "KEEP-tag":    getKeepTag(s)
+        amis = getAmisOf(s)
+        amiKeeps = []
+        for a in amis:
+            amiKeeps.append(getKeepTag(a))
+        snapshotsDict = {"id":              s.id,
+                         "status":          s.status,
+                         "region":          s.region.name,
+                         "progress":        s.progress,
+                         "start_time":      s.start_time,
+                         "volume_id":       s.volume_id,
+                         "volume_size":     s.volume_size,
+                         "KEEP-tag":        getKeepTag(s)
+                         "AMI(s)":          amis
+                         "AMI_KEEP-tags":   amiKeeps
         }
         snapshotsDicts.append(snapshotsDict)
     return snapshotsDicts
+
+
+
+########## I think this works, but needs thorough testing ###########################################
+def getAmisOf(snapshot, images):
+    """retrieve list of AMIs that refer to a given snapshot"""
+    amis = []
+    for im in images:
+        snapshotsOfThisIm = getSnapshotsOf(im)
+        for soti in snapshotsOfThisIm:
+            if soti == snapshot.id:
+                amis.append(im)
+    return amis
+
+
+
 
 def getKeepTag(obj):
     try:
