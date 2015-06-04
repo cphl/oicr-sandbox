@@ -64,7 +64,31 @@ def getImages(region):
         return []
     return images
 
+"""Use dictionaries 'cos we'll have to cross-reference to get snapshots that go with the AMIs"""
+def getImagesD(region):
+    creds = credentials()
+    try:
+        conn = ec2.connect_to_region(region)
+        images = conn.get_all_images(owners='self')
+    except boto.exception.EC2ResponseError:
+        return []
 
+    imageDicts = []
+    for im in images:
+        imageDict = {"name":        im.name,
+                     "id":          im.id,
+                     "region":      im.region.name,
+                     "state":       im.state,
+                     "created":     im.creationDate,
+                     "type":        im.type,
+                     "KEEP":        getKeepTag(im),
+                     "description": im.description
+        }
+        imageDicts.append(imageDict)
+    return imageDicts
+###########################################################!!!!!!!!!!!############################
+###################################### TEST THIS !!!!!!!!!!!!!!!!!!!!!############################
+##################################################################################################
 
 def getKeepTag(obj):
     try:
