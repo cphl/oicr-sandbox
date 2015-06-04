@@ -42,7 +42,7 @@ def getRegions():
         region_names.append(region.name)
     return region_names
 
-# snapshots got this thing where there are public, private, and owned by me
+# snapshots got this thing where there are public, private, and owned by me: appears to default to all?
 # we're interested in the ones owned by us, so select those with 'owner_id' = 794321122735
 # can use owner='self' as a parameter to get_all_snapshots() too
 def getSnapshots(region):
@@ -54,8 +54,8 @@ def getSnapshots(region):
         return []
     return snapshots
 
-"""Return images for one given region, owned by self"""
 def getImages(region):
+    """Return images for one given region, owned by self"""
     creds = credentials()
     try:
         conn = ec2.connect_to_region(region, **creds)
@@ -64,15 +64,22 @@ def getImages(region):
         return []
     return images
 
-"""Use dictionaries 'cos we'll have to cross-reference to get snapshots that go with the AMIs"""
-def getImagesD(region):
-    creds = credentials()
-    try:
-        conn = ec2.connect_to_region(region)
-        images = conn.get_all_images(owners='self')
-    except boto.exception.EC2ResponseError:
-        return []
+def getSnapshotsOf(image):
+    """Return list of snapshot_ids associated with the given image"""
+    snapshotIds = []
+    deviceMapping = image.block_device_mapping  #dict of devices
+    devices = deviceMapping.keys()
+    for d in devices:
+        snapshotId = deviceMapping[d].snapshot_id
+        if snapshotId != None:
+            snapshotIds.append(snapshotId)
+    return snapshotIds
 
+def getImagesD(region):
+    """Use dictionaries 'cos we'll have to cross-reference to get snapshots that go with the AMIs
+        returns list of dictionaries representing images from one region
+    """
+    images = getImages(region)
     imageDicts = []
     for im in images:
         imageDict = {"name":        im.name,
@@ -86,9 +93,23 @@ def getImagesD(region):
         }
         imageDicts.append(imageDict)
     return imageDicts
-###########################################################!!!!!!!!!!!############################
-###################################### TEST THIS !!!!!!!!!!!!!!!!!!!!!############################
-##################################################################################################
+
+def getSnapshotsD(region):
+    """ return a list of dictionaries representing snapshots from one region """
+    snapshots = getSnapshots(region)
+    snapshotsDicts = []
+    for s in snapshots:
+        snapshotsDict = {"id":          s.id,
+                         "status":      s.status,
+                         "region":      s.region.name,
+                         "progress":    s.progress,
+                         "start_time":  s.start_time,
+                         "volume_id":   s.volume_id,
+                         "volume_size": s.volume_size,
+                         "KEEP-tag":    getKeepTag(s)
+        }
+        snapshotsDicts.append(snapshotsDict)
+    return snapshotsDicts
 
 def getKeepTag(obj):
     try:
@@ -199,8 +220,8 @@ def generateInfoImages(regions):
 
 def main ():
     regions = getRegions()
-#    import pdb; pdb.set_trace()
-    generateInfoVolumes(regions)
+    import pdb; pdb.set_trace()
+#    generateInfoVolumes(regions)
 #    generateInfoSnapshots(regions)
 #    generateInfoInstances(regions)
 #    generateInfoImages(regions)
