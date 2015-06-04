@@ -1,4 +1,5 @@
 # Well this is basically all Niall's stuff from before
+# Transition to using dictionaries for snapshots and images
 import os
 import sys
 import boto
@@ -100,8 +101,9 @@ def getSnapshotsD(region):
     ### Can a snapshot belong to more than one AMI? Dunno, keep list just in case
     snapshots = getSnapshots(region)
     snapshotsDicts = []
+    ims = getImages(region)
     for s in snapshots:
-        amis = getAmisOf(s)
+        amis = getAmisOf(s,ims)
         amiKeeps = []
         for a in amis:
             amiKeeps.append(getKeepTag(a))
@@ -112,8 +114,8 @@ def getSnapshotsD(region):
                          "start_time":      s.start_time,
                          "volume_id":       s.volume_id,
                          "volume_size":     s.volume_size,
-                         "KEEP-tag":        getKeepTag(s)
-                         "AMI(s)":          amis
+                         "KEEP-tag":        getKeepTag(s),
+                         "AMI(s)":          amis,
                          "AMI_KEEP-tags":   amiKeeps
         }
         snapshotsDicts.append(snapshotsDict)
@@ -219,7 +221,7 @@ def generateInfoInstances(regions):
         f3.write("INSTANCES\n")
         f3.write("instance ID\tinstance_type\tstate\ttime_stamp_instance_launched\tsecurity_groups\tKEEP-tag\n")
         for region in regions:
-            print "."  #feedback for user
+            print "."  # feedback for user
             instances = getInstances(region)
             for i in instances:
                 f3.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (i.id, i.instance_type, i.state, i.launch_time, getGroups(i), getKeepTag(i)))
@@ -228,27 +230,38 @@ def generateInfoImages(regions):
     print "Writing images info to output file %s" % images_data_output_file
     with open(images_data_output_file, 'w') as f4:
         f4.write("IMAGES\n")
-        f4.write("image_name\timage_id\tregion\tstate\tcreation_date\ttype\tKEEP-tag\tdescription\n")
+        f4.write("image_name\timage_id\tregion\tstate\tcreation_date\ttype\tKEEP-tag\tsnapshots\tdescription\n")
         for r in regions:
-            print "."  #feedback for user
-            images = getImages(r)
+            print "."  # feedback for user
+            images = getImagesD(r)
             for im in images:
-                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                        % (im.name, im.id, im.region.name, im.state, im.creationDate, im.type, getKeepTag(im), im.description) )
-
+                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+#                        % (im.name, im.id, im.region.name, im.state, im.creationDate, im.type, getKeepTag(im), im.description) )
+                 % (im['name'], im['id'], im['region'], im['state'], im['created'], im['type'], im['KEEP'], im['snapshots'], im['description']) )
 
 
 #TODO: add time-passed since launch (in lieu of time tagless)
 #TODO: have AMIs-snaps, ins-vols mapped such that tagging lhs propagates to rhs
 #TODO: have this stuff accessible from s3, public url
 
-def main ():
+def main():
     regions = getRegions()
-    import pdb; pdb.set_trace()
+
+
+#############################
+## debug goodies
+    snaps = getSnapshotsD(regions[0])
+#    import pdb; pdb.set_trace()
+
+
+## end of debug goodies
+#############################
+
+
 #    generateInfoVolumes(regions)
 #    generateInfoSnapshots(regions)
 #    generateInfoInstances(regions)
-#    generateInfoImages(regions)
+    generateInfoImages(regions)
 
 
 if __name__ == '__main__':
