@@ -7,7 +7,7 @@ import sys
 import boto
 from boto import ec2
 
-# Choose the name of the files you want the reports written out to
+# Name your output files
 volumes_data_output_file = "volumes.tsv"
 snapshots_data_output_file = "snapshots.tsv"
 instances_data_output_file = "instances.tsv"
@@ -69,7 +69,7 @@ def getImages(region):
     creds = credentials()
     try:
         conn = ec2.connect_to_region(region, **creds)
-        images = conn.get_all_images(owners='self')
+        images = conn.get_all_images(owners=['self'])
     except boto.exception.EC2ResponseError:
         return []
     return images
@@ -94,16 +94,16 @@ def getImagesD(region):
     images = getImages(region)
     imageDicts = []
     for im in images:
-        imageDict = {"name":        im.name,
-                     "id":          im.id,
-                     "region":      im.region.name,
-                     "state":       im.state,
-                     "created":     im.creationDate,
-                     "type":        im.type,
-                     "KEEP":        getKeepTag(im),
-                     "snapshots":   getSnapshotsOf(im),
+        imageDict = {"name": im.name,
+                     "id": im.id,
+                     "region": im.region.name,
+                     "state": im.state,
+                     "created": im.creationDate,
+                     "type": im.type,
+                     "KEEP": getKeepTag(im),
+                     "snapshots": getSnapshotsOf(im),
                      "description": im.description
-                    }
+                     }
         imageDicts.append(imageDict)
     return imageDicts
 
@@ -115,26 +115,32 @@ def getSnapshotsD(region):
     snapshotsDicts = []
     ims = getImages(region)
     for s in snapshots:
-        amis = getAmisOf(s,ims)
+        amis = getAmisOf(s, ims)
+        amiIds = []
         amiKeeps = []
         for a in amis:
+            amiIds.append(a.id.encode())
             amiKeeps.append(getKeepTag(a))
-        snapshotsDict = {"id":              s.id,
-                         "status":          s.status,
-                         "region":          s.region.name,
-                         "progress":        s.progress,
-                         "start_time":      s.start_time,
-                         "volume_id":       s.volume_id,
-                         "volume_size":     s.volume_size,
-                         "KEEP-tag":        getKeepTag(s),
-                         "AMI(s)":          amis,
-                         "AMI_KEEP-tags":   amiKeeps
-                        }
+        if len(amiIds) == 1:
+            amiIds = amiIds[0]
+        if len(amiKeeps) == 1:
+            amiKeeps = amiKeeps[0]
+        snapshotsDict = {"id": s.id,
+                         "status": s.status,
+                         "region": s.region.name,
+                         "progress": s.progress,
+                         "start_time": s.start_time,
+                         "volume_id": s.volume_id,
+                         "volume_size": s.volume_size,
+                         "KEEP-tag": getKeepTag(s),
+                         "AMI(s)": amiIds,
+                         "AMI_KEEP-tags": amiKeeps
+                         }
         snapshotsDicts.append(snapshotsDict)
     return snapshotsDicts
 
 
-########## Probably works, needs testing ###########################################
+########## Seems to work ###################
 def getAmisOf(snapshot, images):
     """retrieve list of AMIs that refer to a given snapshot"""
     amis = []
@@ -169,6 +175,8 @@ def getGroups(instance):
 
 def getInstanceOf(volume):
     # ughhhhhhhh refactor later (shouldn't do this for every single one, takes forever)
+    # I hate this
+    # this is wrong
     creds = credentials()
     conn = ec2.connect_to_region(volume.region.name, **creds)
     ins_id = volume.attach_data.instance_id
@@ -181,13 +189,15 @@ def generateInfoVolumes(regions):
     print "\nWriting volumes info to output file %s" % volumes_data_output_file
     with open(volumes_data_output_file, 'w') as f1:
         f1.write("VOLUMES\n")
-        f1.write("volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tassociated_instance\tstate\tsize\tcreate_time\tregion(zone)\tsnapshot_ID\n\n")
+        f1.write(
+            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tassociated_instance\tstate\tsize\tcreate_time\tregion(zone)\tsnapshot_ID\n\n")
         for r in regions:
             volumes = getVolumes(r)
             print "."  # give some feedback to the user
             for v in volumes:
                 f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                  % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), getInstanceOf(v), v.status, v.size, v.create_time, v.zone, v.snapshot_id))
+                         % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), getInstanceOf(v), v.status, v.size,
+                            v.create_time, v.zone, v.snapshot_id))
 
 
 def generateInfoSnapshots(regions):
@@ -199,10 +209,12 @@ def generateInfoSnapshots(regions):
         print "."  # feedback for the user
     with open(snapshots_data_output_file, 'w') as f2:
         f2.write("SNAPSHOTS\n")
-        f2.write("snapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
+        f2.write(
+            "snapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
         for s in snapshots:
             f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                 % (s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['AMI(s)'], s['start_time'], s['status'], s['region'], s['progress'], s['volume_id'], s['volume_size']))
+                     % (s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['AMI(s)'], s['start_time'], s['status'],
+                        s['region'], s['progress'], s['volume_id'], s['volume_size']))
 
 
 def generateInfoInstances(regions):
@@ -215,7 +227,8 @@ def generateInfoInstances(regions):
             print "."  # feedback for user
             instances = getInstances(region)
             for i in instances:
-                f3.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (i.id, getKeepTag(i), i.instance_type, i.state, i.launch_time, getGroups(i)))
+                f3.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (
+                    i.id, getKeepTag(i), i.instance_type, i.state, i.launch_time, getGroups(i)))
 
 
 def generateInfoImages(regions):
@@ -228,20 +241,21 @@ def generateInfoImages(regions):
             images = getImagesD(r)
             for im in images:
                 f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                 % (im['id'], im['KEEP'], im['name'], im['region'], im['state'], im['created'], im['type'], im['snapshots'], im['description']))
+                         % (im['id'], im['KEEP'], im['name'], im['region'], im['state'], im['created'], im['type'],
+                            im['snapshots'], im['description']))
 
-# TODO: add time-passed since launch (in lieu of time tagless)
-# TODO: have AMIs-snaps, ins-vols mapped such that tagging lhs propagates to rhs
+
+# TODO: add time-passed since launch
 # TODO: have this stuff accessible from s3, public url
 
 
 def main():
     regions = getRegions()
 
-    generateInfoVolumes(regions)
+#    generateInfoVolumes(regions)
     generateInfoSnapshots(regions)
-    generateInfoInstances(regions)
-    generateInfoImages(regions)
+#    generateInfoInstances(regions)
+#    generateInfoImages(regions)
 
 
 if __name__ == '__main__':
