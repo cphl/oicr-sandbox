@@ -14,6 +14,14 @@ instances_data_output_file = "instances.tsv"
 images_data_output_file = "images.tsv"
 
 
+def getRegions():
+    regions = ec2.regions()
+    region_names = []
+    for region in regions:
+        region_names.append(region.name)
+    return region_names
+
+
 def credentials():
     return {"aws_access_key_id": os.environ['AWS_ACCESS_KEY'],
             "aws_secret_access_key": os.environ['AWS_SECRET_KEY']}
@@ -41,14 +49,6 @@ def getVolumes(region):
     except boto.exception.EC2ResponseError:
         return []
     return volumes
-
-
-def getRegions():
-    regions = ec2.regions()
-    region_names = []
-    for region in regions:
-        region_names.append(region.name)
-    return region_names
 
 
 # snapshots got this thing where there are public, private, and owned by me: defaults to all or public?
@@ -140,6 +140,36 @@ def getSnapshotsD(region):
     return snapshotsDicts
 
 
+def getVolumesD(region):
+    """ return a list of dictionaries representing volumes from one region """
+    volumes = getVolumes(region)
+    instances = getInstancesD(region)
+
+    volumesDicts = []
+    for v in volumesDicts:
+        volumesDict = {"id": v.id,
+                       "KEEP-tag": getKeepTag(v),
+                       "instance_KEEP-tag": getKeepTag(getInstanceOf(v)),
+                       "instance": v.attach_data.instance_id,
+                       "status": v.status,
+                       "size": v.size,
+                       "create-time": v.create_time,
+                       "zone": v.zone,
+                       "snapshot_id": v.snapshot_id
+                       }
+
+def getInstancesD(region):
+    """ return a list of dictionaries representing instances for one region, will help with volume-instance-KEEP-tag look-up. Maybe. """
+    instances = getInstances(region)
+    instancesDicts = {"id":                 i.id,
+                      "KEEP-tag":           getKeepTag(i),
+                      "instance_type":      i.instance_type,
+                      "state":              i.state,
+                      "launch_time":        i.launch_time,
+                      "security_groups":    getGroups(i)
+                      }
+
+
 ########## Seems to work ###################
 def getAmisOf(snapshot, images):
     """retrieve list of AMIs that refer to a given snapshot"""
@@ -174,15 +204,18 @@ def getGroups(instance):
 
 
 def getInstanceOf(volume):
-    # ughhhhhhhh refactor later (shouldn't do this for every single one, takes forever)
-    # I hate this
-    # this is wrong
+    """ Returns the actual instance
+        (if only instance_id is needed, can access directly from volume)
+        (if KEEP tag is needed, maybe it's better to grab it from a local dictionary list of instances)
+    """
+    # ughhhhhhhh refactor later (shouldn't do this for every single volume, takes forever)
     creds = credentials()
     conn = ec2.connect_to_region(volume.region.name, **creds)
     ins_id = volume.attach_data.instance_id
     reservation = conn.get_all_instances(instance_ids=ins_id)[0]
     return reservation.instances[0]
 
+###############################################################################################################################
 
 def generateInfoVolumes(regions):
     """ Write volumes to file """
@@ -251,11 +284,11 @@ def generateInfoImages(regions):
 
 def main():
     regions = getRegions()
-
-#    generateInfoVolumes(regions)
+    #import pdb; pdb.set_trace()
+    generateInfoVolumes(regions)
     generateInfoSnapshots(regions)
-#    generateInfoInstances(regions)
-#    generateInfoImages(regions)
+    generateInfoInstances(regions)
+    generateInfoImages(regions)
 
 
 if __name__ == '__main__':
