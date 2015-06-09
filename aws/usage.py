@@ -102,7 +102,8 @@ def getImagesD(region):
                      "type": im.type,
                      "KEEP": getKeepTag(im),
                      "snapshots": getSnapshotsOf(im),
-                     "description": im.description
+                     "description": im.description,
+                     "PROD": isProduction(im)
                      }
         imageDicts.append(imageDict)
     return imageDicts
@@ -134,7 +135,8 @@ def getSnapshotsD(region):
                          "volume_size": s.volume_size,
                          "KEEP-tag": getKeepTag(s),
                          "AMI(s)": amiIds,
-                         "AMI_KEEP-tags": amiKeeps
+                         "AMI_KEEP-tags": amiKeeps,
+                         "PROD": isProduction(s)
                          }
         snapshotsDicts.append(snapshotsDict)
     return snapshotsDicts
@@ -156,7 +158,8 @@ def getVolumesD(region):
                        "create-time": v.create_time,
                        "region": v.region.name,
                        "zone": v.zone,
-                       "snapshot_id": v.snapshot_id
+                       "snapshot_id": v.snapshot_id,
+                       "PROD": isProduction(v)
                        }
 
 
@@ -169,7 +172,8 @@ def getInstancesD(region):
                       "state": i.state,
                       "launch_time": i.launch_time,
                       "security_groups": getGroups(i),
-                      "region": i.region.name
+                      "region": i.region.name,
+                      "PROD": isProduction(i)
                       }
 
 
@@ -192,6 +196,11 @@ def getKeepTag(obj):
         # Note: some with empty KEEP-tags, through web console they look the same as those untagged
         return "-----"
     return tag
+
+
+def isProduction(obj):
+    """Returns true if the object (instance, volume, snapshot, AMI) has a tag with 'PROD' for key"""
+    return 'PROD' in obj.tags  # This is deprecated? obj.tags.has_key('PROD')
 
 
 def getGroups(instance):
@@ -227,13 +236,13 @@ def generateInfoVolumes(regions):
     with open(volumes_data_output_file, 'w') as f1:
         f1.write("VOLUMES\n")
         f1.write(
-            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tassociated_instance\tstate\tsize\tcreate_time\tregion\tzone\tsnapshot_ID\n\n")
+            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tassociated_instance\tstate\tsize\tcreate_time\tregion\tzone\tsnapshot_ID\n\n")
         for r in regions:
             volumes = getVolumes(r)
             print "."  # give some feedback to the user
             for v in volumes:
-                f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), getInstanceOf(v), v.status, v.size,
+                f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                         % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), isProduction(v), getInstanceOf(v), v.status, v.size,
                             v.create_time, v.region.name, v.zone, v.snapshot_id))
 
 
@@ -247,10 +256,10 @@ def generateInfoSnapshots(regions):
     with open(snapshots_data_output_file, 'w') as f2:
         f2.write("SNAPSHOTS\n")
         f2.write(
-            "snapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
+            "snapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
         for s in snapshots:
-            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                     % (s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['AMI(s)'], s['start_time'], s['status'],
+            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                     % (s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'], s['start_time'], s['status'],
                         s['region'], s['progress'], s['volume_id'], s['volume_size']))
 
 
@@ -259,26 +268,26 @@ def generateInfoInstances(regions):
     print "Writing instances info to output file %s" % instances_data_output_file
     with open(instances_data_output_file, 'w') as f3:
         f3.write("INSTANCES\n")
-        f3.write("instance ID\tKEEP-tag\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
+        f3.write("instance ID\tKEEP-tag\tproduction\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
         for region in regions:
             print "."  # feedback for user
             instances = getInstances(region)
             for i in instances:
-                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
-                    i.id, getKeepTag(i), i.instance_type, i.state, i.launch_time, getGroups(i), i.region.name))
+                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+                    i.id, getKeepTag(i), isProduction(i), i.instance_type, i.state, i.launch_time, getGroups(i), i.region.name))
 
 
 def generateInfoImages(regions):
     print "Writing images info to output file %s" % images_data_output_file
     with open(images_data_output_file, 'w') as f4:
         f4.write("IMAGES\n")
-        f4.write("image_id\tKEEP-tag\timage_name\tregion\tstate\tcreated\ttype\tsnapshots\tdescription\n\n")
+        f4.write("image_id\tKEEP-tag\tproduction?\timage_name\tregion\tstate\tcreated\ttype\tsnapshots\tdescription\n\n")
         for r in regions:
             print "."  # feedback for user
             images = getImagesD(r)
             for im in images:
-                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (im['id'], im['KEEP'], im['name'], im['region'], im['state'], im['created'], im['type'],
+                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                         % (im['id'], im['KEEP'], im['PROD'], im['name'], im['region'], im['state'], im['created'], im['type'],
                             im['snapshots'], im['description']))
 
 
@@ -289,7 +298,23 @@ def generateInfoImages(regions):
 
 def main():
     regions = getRegions()
+
+    #################################################
+    # debugging goodies                             #
+    #reg = regions[3]  # ireland?                   #
+    #ims = getImages(reg)
+    #im = ims[0]
+    #vols = getVolumes(reg)
+    #vol = vols[0]
+    #ins = getInstances(reg)
+    #ins0 = ins[0]
+    #snaps = getSnapshots(reg)
+    #snap = snaps[0]
+    # ireland ims[19] has empty string for PROD-tag
     #import pdb; pdb.set_trace()
+    #                                               #
+    #################################################
+
     generateInfoVolumes(regions)
     generateInfoSnapshots(regions)
     generateInfoInstances(regions)
