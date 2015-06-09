@@ -1,4 +1,4 @@
-# Generate reports showing AWS snapshots, AMIs, volumes, and instances; and their KEEP-tags
+# Generate reports showing AWS snapshots, AMIs, volumes, and instances; and their KEEP-tags and if PROD-tagged
 #   Snapshots report shows the associated AMIs and the KEEP-tags thereof
 #   Volumes report shows the associated instances and the KEEP-tags thereof
 # Code borrowed heavily from Niall's previous script: volume_cleanup.py
@@ -119,13 +119,19 @@ def getSnapshotsD(region):
         amis = getAmisOf(s, ims)
         amiIds = []
         amiKeeps = []
-        for a in amis:
-            amiIds.append(a.id.encode())
-            amiKeeps.append(getKeepTag(a))
-        if len(amiIds) == 1:
-            amiIds = amiIds[0]
-        if len(amiKeeps) == 1:
-            amiKeeps = amiKeeps[0]
+
+        if len(amis) == 1:
+            amiIds = amis[0].id.encode()
+            amiKeeps = getKeepTag(amis[0])
+
+        elif len(amis) == 0:
+            amiIds = "-------no-AMI-found"
+            amiKeeps = "-------no-AMI-found"
+        else:
+            for a in amis:
+                amiIds.append(a.id.encode())
+                amiKeeps.append(getKeepTag(a))
+
         snapshotsDict = {"id": s.id,
                          "status": s.status,
                          "region": s.region.name,
@@ -190,12 +196,19 @@ def getAmisOf(snapshot, images):
 
 
 def getKeepTag(obj):
-    try:
-        tag = obj.tags['KEEP']
-    except:
-        # Note: some with empty KEEP-tags, through web console they look the same as those untagged
-        return "-----"
-    return tag
+    """If tag with key='KEEP' exists, return its value (can be an empty string), else it's '-------no-tag'"""
+    if 'KEEP' in obj.tags:
+        return obj.tags['KEEP']
+    else:
+        return "-------no-tag"
+
+    # try:
+    #     tag = obj.tags['KEEP']
+    # except:
+    #     # Note: some with empty KEEP-tags, through web console they look the same as those untagged
+    #     return "-----"
+    # return tag
+
 
 
 def isProduction(obj):
@@ -242,7 +255,7 @@ def generateInfoVolumes(regions):
             print "."  # give some feedback to the user
             for v in volumes:
                 f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), isProduction(v), getInstanceOf(v), v.status, v.size,
+                         % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), isProduction(v), v.attach_data.instance_id, v.status, v.size,
                             v.create_time, v.region.name, v.zone, v.snapshot_id))
 
 
@@ -291,8 +304,7 @@ def generateInfoImages(regions):
                             im['snapshots'], im['description']))
 
 
-# TODO: add production tag
-# TODO: add time-passed since launch
+# TODO: future? add time-passed since launch
 # TODO: have this stuff accessible from s3, public url
 
 
@@ -301,17 +313,17 @@ def main():
 
     #################################################
     # debugging goodies                             #
-    #reg = regions[3]  # ireland?                   #
-    #ims = getImages(reg)
-    #im = ims[0]
-    #vols = getVolumes(reg)
-    #vol = vols[0]
-    #ins = getInstances(reg)
-    #ins0 = ins[0]
-    #snaps = getSnapshots(reg)
-    #snap = snaps[0]
+    # reg = regions[3]  # ireland                   #
+    # ims = getImages(reg)
+    # im = ims[0]
+    # vols = getVolumes(reg)
+    # vol = vols[0]
+    # ins = getInstances(reg)
+    # ins0 = ins[0]
+    # snaps = getSnapshots(reg)
+    # snap = snaps[0]
     # ireland ims[19] has empty string for PROD-tag
-    #import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     #                                               #
     #################################################
 
