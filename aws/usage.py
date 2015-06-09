@@ -249,7 +249,7 @@ def generateInfoVolumes(regions):
     with open(volumes_data_output_file, 'w') as f1:
         f1.write("VOLUMES\n")
         f1.write(
-            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tassociated_instance\tstate\tsize\tcreate_time\tregion\tzone\tsnapshot_ID\n\n")
+            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tassociated_instance\tstate\tsize\tcreate_time\tregion\tzone\tassociated_snapshot\n\n")
         for r in regions:
             volumes = getVolumes(r)
             print "."  # give some feedback to the user
@@ -294,7 +294,7 @@ def generateInfoImages(regions):
     print "Writing images info to output file %s" % images_data_output_file
     with open(images_data_output_file, 'w') as f4:
         f4.write("IMAGES\n")
-        f4.write("image_id\tKEEP-tag\tproduction?\timage_name\tregion\tstate\tcreated\ttype\tsnapshots\tdescription\n\n")
+        f4.write("image_id\tKEEP-tag\tproduction?\timage_name\tregion\tstate\tcreated\ttype\tassociated_snapshots\tdescription\n\n")
         for r in regions:
             print "."  # feedback for user
             images = getImagesD(r)
@@ -305,7 +305,7 @@ def generateInfoImages(regions):
 
 
 # TODO: future? add time-passed since launch
-# TODO: have this stuff accessible from s3, public url
+# TODO: possibility? have these reports accessible from s3, public url, cronjob
 
 
 def main():
