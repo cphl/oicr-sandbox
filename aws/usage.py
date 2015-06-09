@@ -154,19 +154,22 @@ def getVolumesD(region):
                        "status": v.status,
                        "size": v.size,
                        "create-time": v.create_time,
+                       "region": v.region.name,
                        "zone": v.zone,
                        "snapshot_id": v.snapshot_id
                        }
 
+
 def getInstancesD(region):
     """ return a list of dictionaries representing instances for one region, will help with volume-instance-KEEP-tag look-up. Maybe. """
     instances = getInstances(region)
-    instancesDicts = {"id":                 i.id,
-                      "KEEP-tag":           getKeepTag(i),
-                      "instance_type":      i.instance_type,
-                      "state":              i.state,
-                      "launch_time":        i.launch_time,
-                      "security_groups":    getGroups(i)
+    instancesDicts = {"id": i.id,
+                      "KEEP-tag": getKeepTag(i),
+                      "instance_type": i.instance_type,
+                      "state": i.state,
+                      "launch_time": i.launch_time,
+                      "security_groups": getGroups(i),
+                      "region": i.region.name
                       }
 
 
@@ -215,6 +218,7 @@ def getInstanceOf(volume):
     reservation = conn.get_all_instances(instance_ids=ins_id)[0]
     return reservation.instances[0]
 
+
 ###############################################################################################################################
 
 def generateInfoVolumes(regions):
@@ -223,14 +227,14 @@ def generateInfoVolumes(regions):
     with open(volumes_data_output_file, 'w') as f1:
         f1.write("VOLUMES\n")
         f1.write(
-            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tassociated_instance\tstate\tsize\tcreate_time\tregion(zone)\tsnapshot_ID\n\n")
+            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tassociated_instance\tstate\tsize\tcreate_time\tregion\tzone\tsnapshot_ID\n\n")
         for r in regions:
             volumes = getVolumes(r)
             print "."  # give some feedback to the user
             for v in volumes:
-                f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
                          % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), getInstanceOf(v), v.status, v.size,
-                            v.create_time, v.zone, v.snapshot_id))
+                            v.create_time, v.region.name, v.zone, v.snapshot_id))
 
 
 def generateInfoSnapshots(regions):
@@ -255,13 +259,13 @@ def generateInfoInstances(regions):
     print "Writing instances info to output file %s" % instances_data_output_file
     with open(instances_data_output_file, 'w') as f3:
         f3.write("INSTANCES\n")
-        f3.write("instance ID\tKEEP-tag\tinstance_type\tstate\tlaunched\tsecurity_groups\n\n")
+        f3.write("instance ID\tKEEP-tag\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
         for region in regions:
             print "."  # feedback for user
             instances = getInstances(region)
             for i in instances:
-                f3.write("%s\t%s\t%s\t%s\t%s\t%s\n" % (
-                    i.id, getKeepTag(i), i.instance_type, i.state, i.launch_time, getGroups(i)))
+                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+                    i.id, getKeepTag(i), i.instance_type, i.state, i.launch_time, getGroups(i), i.region.name))
 
 
 def generateInfoImages(regions):
@@ -278,6 +282,7 @@ def generateInfoImages(regions):
                             im['snapshots'], im['description']))
 
 
+# TODO: add production tag
 # TODO: add time-passed since launch
 # TODO: have this stuff accessible from s3, public url
 
