@@ -29,3 +29,21 @@ Select donors where EMBL *is* performed on ICGC only:
 Discrepancy between EMBL and DKFZ: Brian's advice: toss any where there aren't both. So: select EMBLs out of DKFZs:
 	grep '"is_embl_variant_calling_performed": true' ICGC_dkfz_true.jsonl > ICGC_both_DKFZ_and_EMBL.jsonl
 	126 lines
+
+
+====================
+Redo BWA
+
+If a donor has "bwa_timing", then we know it ran bwa. Select ICGC donors that ran BWA
+	grep bwa_timing ../ICGC_donors_1957.jsonl > ICGC_bwa_1721.jsonl
+	1721 donors have the timing we're looking for. Noticed that some have download times of null so... count them separately?
+
+[	Let's see how many there are with some null download times --> can't do it this way 'cos variant timing uses the same key
+		grep '"download_timing_seconds": null' ICGC_bwa_1721.jsonl |wc -l
+		917	<--	whoa.
+		grep '"download_timing_seconds": 0' ICGC_bwa_1721.jsonl |wc -l
+		16	<--	what. Investigate.
+	Will have to process line by line
+]
+
+
