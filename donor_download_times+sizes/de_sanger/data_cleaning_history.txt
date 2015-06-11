@@ -1,0 +1,31 @@
+2883 donors in original file donor_p_150610084030.jsonl
+
+
+Select TCGA projects (to keep record that they've been removed):
+	grep '"dcc_project_code": ".*\-US"' donor_p_150610084030.jsonl > TCGA_donors_926.jsonl
+
+
+Select only ICGC (don't select the -US projects):
+	grep -v '"dcc_project_code": ".*\-US"' donor_p_150610084030.jsonl > ICGC_donors_1957.jsonl
+
+
+Select donors where Sanger *is* performed (ICGC only):
+	grep '"is_sanger_variant_calling_performed": true' ICGC_donors_1957.jsonl > ICGC_sanger_true.jsonl
+	1415 lines
+
+Select donors where DKFZ *is* performed (ICGC only):
+	grep '"is_dkfz_variant_calling_performed": true' ICGC_donors_1957.jsonl > ICGC_dkfz_true.jsonl
+	127 lines (so 127 donors) (same when TCGA included)
+
+	(For false, there are 2756 lines, and we can't find '"is_dkfz_variant_calling_performed": true' when we open it in VI. Also, the following command returns no results.)
+grep '"is_dkfz_variant_calling_performed": false' ICGC_dkfz_true.jsonl)
+
+
+Select donors where EMBL *is* performed on ICGC only:
+	grep '"is_embl_variant_calling_performed": true' ICGC_donors_1957.jsonl > ICGC_embl_true.jsonl
+	128 lines
+
+
+Discrepancy between EMBL and DKFZ: Brian's advice: toss any where there aren't both. So: select EMBLs out of DKFZs:
+	grep '"is_embl_variant_calling_performed": true' ICGC_dkfz_true.jsonl > ICGC_both_DKFZ_and_EMBL.jsonl
+	126 lines
