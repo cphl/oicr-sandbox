@@ -40,7 +40,7 @@ def main():
             number_donors += 1
 
     print "\nTotal time:\t%d" % total_time
-    print "Number of donors counted:\t%d" % number_donors
+    print "Total donors included:\t%d" % number_donors
 
 if __name__ == '__main__':
     main()
