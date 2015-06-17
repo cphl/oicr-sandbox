@@ -14,8 +14,8 @@ def getFileFromBucket():
     zip_filename = csv_filename + ".zip"
 
     # If local data is older than 1 day, download fresh data.
-    mod_time = os.path.getmtime(csv_filename)
-    if datetime.date.today() - datetime.date.fromtimestamp(mod_time) > datetime.timedelta(days=0):
+    # mod_time = os.path.getmtime(csv_filename)
+    if not os.path.isfile(csv_filename) or datetime.date.today() - datetime.date.fromtimestamp(os.path.getmtime(csv_filename)) > datetime.timedelta(days=0):
         conn = boto.connect_s3()
         mybucket = conn.get_bucket('oicr.detailed.billing')
         print "Downloading " + zip_filename + "..."
@@ -29,6 +29,7 @@ def getFileFromBucket():
 
 def read_file(sourcefile):
     """do things with the csv file
+        - get all untagged (right now includes empty string tags) KEEP sorted by Operation
         - get all distinct names from KEEP-tags
         - ...
         ...
@@ -54,10 +55,48 @@ def read_file(sourcefile):
             for match in all_matches:
                 sorted_data.append(match)
 
-        for line in sorted_data:
-            print line
+        operations_totals = []
+        with open('untagged.csv', 'w') as csvfile:
+            # out put all my data yo
+            fieldnames = ['Operation', 'Cost', 'user:KEEP', 'user:PROD', 'RecordId',
+                          'RateId', 'PricingPlanId', 'UsageType', 'AvailabilityZone',
+                          'ItemDescription', 'UsageQuantity', 'Rate', 'Cost', 'ResourceId']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            prev_op = sorted_data[0]['Operation']  # initialize
+            op_total = 0
+            for line in sorted_data:
+                if line['RecordType'] == "LineItem":
+                    if line['Operation'] != prev_op:
+                        writer.writerow({'Operation': prev_op + ' total', 'Cost': op_total})
+                        operations_totals.append({'Operation': prev_op + ' total', 'Cost': op_total})
+                        op_total = 0
+                        # import pdb; pdb.set_trace()
+                        prev_op = line['Operation']
+                    if line['user:KEEP'] == "" and line['user:PROD'] == "":
 
-            # #if row['user:KEEP'] is not "":
+                        writer.writerow({'Operation': line['Operation'], 'Cost': line['Cost'],
+                                         'user:KEEP': line['user:KEEP'], 'user:PROD': line['user:PROD'],
+                                         'RecordId': line['RecordId'], 'RateId': line['RateId'],
+                                         'PricingPlanId': line['PricingPlanId'], 'UsageType': line['UsageType'],
+                                         'AvailabilityZone': line['AvailabilityZone'],
+                                         'ItemDescription': line['ItemDescription'], 'UsageQuantity': line['UsageQuantity'],
+                                         'Rate': line['Rate'], 'Cost': line['Cost'], 'ResourceId': line['ResourceId']})
+                        op_total += float(line['Cost'])
+            writer.writerow({'Operation': prev_op + ' total', 'Cost': op_total})            # get that last one!
+            operations_totals.append({'Operation': prev_op + ' total', 'Cost': op_total})   # get that last one!
+
+        total_untagged_cost = 0
+        with open('untagged_operations_totals.csv', 'w') as total_file:
+            fields = ['Operation', 'Cost']
+            w = csv.DictWriter(total_file, fieldnames=fields)
+            w.writeheader()
+            for row in operations_totals:
+                w.writerow({'Operation': row['Operation'], 'Cost': row['Cost']})
+                total_untagged_cost += row['Cost']
+            w.writerow({'Operation': 'Overall untagged operations total', 'Cost': total_untagged_cost})
+
+            # if row['user:KEEP'] is not "":
             # keepers.add(row['user:KEEP'])
 
     # return keepers
@@ -98,7 +137,7 @@ def write_users_report():
 
 def main():
     csv_filename = getFileFromBucket()
-    keepers = read_file(csv_filename)
+    read_file(csv_filename)
     # import pdb; pdb.set_trace()
 
     # write_untagged_report(csv_filename)
