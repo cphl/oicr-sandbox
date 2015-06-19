@@ -54,7 +54,7 @@ class SpreadsheetCache(object):
         return csv_filename
 
 
-def process_untagged(sourcefile):
+def process_untagged():
     """ Write out TSV files that can be uploaded for others to access:
             - One has all untagged resources sorted by Operation and totalled.
             - Other has only a summary of totals with Operation and Cost.
@@ -122,7 +122,7 @@ def process_untagged(sourcefile):
         w.writerow({'Operation': 'Overall untagged operations total', 'Cost': total_untagged_cost})
 
 
-def process_tagged(sourcefile):
+def process_tagged():
     """ Write out a TSV file that can be uploaded for others to access.
         Usage tagged by name in the KEEP-tag.
     """
@@ -221,12 +221,16 @@ def get_keepers():
     return keepers
 
 
+def generate_one_report():
+    """Sort and tabulate totals for any given KEEP-tag, including the blank ones"""
+    pass
+
+
 def main():
     SC.fix_case()
     keepers = get_keepers()
-    import pdb; pdb.set_trace()
-    # process_untagged(source_csv)
-    # process_tagged(source_csv)
+    # process_untagged()
+    # process_tagged()
 
 
 if __name__ == '__main__':
