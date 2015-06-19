@@ -15,30 +15,31 @@ tagged_summary_report = 'tagged_user_totals.csv'
 
 class SpreadsheetCache(object):
     def __init__(self):
-        self.filename = self.getFileFromBucket()
-        tempdata
+        self.filename = self.get_file_from_bucket()
         self.spreadsheet = []
         with open(self.filename) as csvfile:
             tempdata = csv.DictReader(csvfile)
-        for row in tempdata:
-            self.spreadsheet.append(row)
+            for row in tempdata:
+                self.spreadsheet.append(row)
 
     def data(self):
         # A method to return the spreadsheet in the format you want
         # Maybe it returns an iterator, or just a dictionary or a list
         # THis is the thing you'll point to whenever you need the spreadsheet
         return self.spreadsheet
-    def fixcase(self):
+
+    def fix_case(self):
         # A method to operate on the spreadsheet and update the column you need uppered
         # Doesn't return anything, just fixes the spreadsheet
-        pass
-    def getFileFromBucket(self):
-        """Grab today's billing report from the S3 bucket, extract into pwd"""
+        for line in self.spreadsheet:
+            line['user:KEEP'] = line['user:KEEP'].upper()
+            line['user:PROD'] = line['user:PROD'].lower()
 
+    def get_file_from_bucket(self):
+        """Grab today's billing report from the S3 bucket, extract into pwd"""
         prefix = "794321122735-aws-billing-detailed-line-items-with-resources-and-tags-"
         csv_filename = prefix + str(datetime.date.today().isoformat()[0:7]) + ".csv"
         zip_filename = csv_filename + ".zip"
-
         # If local data is older than 1 day, download fresh data.
         # mod_time = os.path.getmtime(csv_filename)
         if not os.path.isfile(csv_filename) or datetime.date.today() - datetime.date.fromtimestamp(os.path.getmtime(csv_filename)) > datetime.timedelta(days=0):
@@ -125,15 +126,14 @@ def process_tagged(sourcefile):
     """ Write out a TSV file that can be uploaded for others to access.
         Usage tagged by name in the KEEP-tag.
     """
-    with open(sourcefile) as csvfile:
 
-        # Get data and sort it by KEEP and PROD tags
-        reader = csv.DictReader(csvfile)
-        keep_tagged_data = []
-        for row in reader:
-            if row['user:KEEP'] != "":
-                keep_tagged_data.append(row)
-        keep_tagged_data = sorted(keep_tagged_data, key=itemgetter('user:KEEP', 'user:PROD', 'Operation'))
+    # Get data and sort it by KEEP and PROD tags
+    reader = SC.data()
+    keep_tagged_data = []
+    for row in reader:
+        if row['user:KEEP'] != "":
+            keep_tagged_data.append(row)
+    keep_tagged_data = sorted(keep_tagged_data, key=itemgetter('user:KEEP', 'user:PROD', 'Operation'))
 
     print "Generating report of tagged resources: " + tagged_full_report
     with open(tagged_full_report, 'w') as f:
@@ -212,38 +212,23 @@ def process_tagged(sourcefile):
             w2.writerow({'KEEP-tag entry': keeper_sums[i]['user:KEEP'] + ' total', 'Cost': keeper_sums[i]['Cost']})
 
 
-def get_keepers(source_csv):
-    """ Get all names in the KEEP-tag
-        Also make keepers case-insensitive (change in csv file)
-    """
-    with open(source_csv) as f:
-        reader = csv.DictReader(f)
-        keepers = set()
-        for row in reader:
-            keepers.add(row['user:KEEP'])
+def get_keepers():
+    """ Returns set of strings = names in the KEEP-tag """
+    reader = SC.data()
+    keepers = set()
+    for row in reader:
+        keepers.add(row['user:KEEP'])
     return keepers
 
 
-def case_keepers(source_csv):
-    output = []
-    with open(source_csv) as f:
-        data = f.readlines()
-    for line in data:
-        modded_line = line{}
-        output.append(modded_line)
-    sys.exit()
-
-
-
 def main():
-    source_csv = getFileFromBucket()
-    case_keepers(source_csv)
-    # keepers = get_keepers(source_csv)
-    # import pdb; pdb.set_trace()
+    SC.fix_case()
+    keepers = get_keepers()
+    import pdb; pdb.set_trace()
     # process_untagged(source_csv)
     # process_tagged(source_csv)
 
 
 if __name__ == '__main__':
-    SC = SpreadsheetCache("Yourfilename")
+    SC = SpreadsheetCache()
     main()
