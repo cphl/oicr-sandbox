@@ -1,7 +1,4 @@
-"""Collect data for BWA runtimes:
-- using whitelist to grab particular donors only,
-- using within a particular time frame.
-"""
+"""Collect data for BWA runtimes using whitelist to grab particular donors only"""
 
 import json
 import datetime
@@ -40,7 +37,6 @@ def select_whitelist_donors():
 
 def get_times(lanes_timings):
     """ Input is a list of lanes' timings.
-
         Grab 4 values from json:    bwa_timing_seconds,
                                     download_timing_seconds,
                                     merge_timing_seconds,
@@ -121,6 +117,16 @@ def get_parallel_times(specimen, task, number_of_processors):
     return parallel_time_best, parallel_time_worst
 
 
+def get_best_worst_cases_full_time(timings_list):
+    """Take a list of timings, paired by task, best then worst
+    (i.e. [bwa best case, bwa worst case, merge best case, merge worst case, qc best case, qc worst case])
+    Return full time for best case and full time for worst case.
+    """
+    full_best = sum([timings_list[i] for i in range(len(timings_list)) if math.fmod(i, 2) == 0])
+    full_worst = sum([timings_list[i] for i in range(len(timings_list)) if math.fmod(i, 2) == 1])
+    return full_best, full_worst
+
+
 def main():
 
     whitelist_donors = select_whitelist_donors()
@@ -131,35 +137,36 @@ def main():
     #         f.flush()
 
     print '\t'.join(["donor_unique_id", "type", "bwa_parallel_best", "bwa_parallel_worst", "merge_parallel_best",
-                     "merge_parallel_worst", "qc_parallel_best", "qc_parallel_worst", "overall_parallel_best",
-                     "overall_parallel_worst"])
+                     "merge_parallel_worst", "qc_parallel_best", "qc_parallel_worst", "full_parallel_best",
+                     "full_parallel_worst"])
 
     tasks = ['bwa', 'merge', 'qc']
     controls_counted = 0
     specimens_counted = 0
     total_best_time = 0
     total_worse_time = 0
+    parallel_timings = []
 
     for d in whitelist_donors:
-        parallel_timings = []
+
         # process control
         if 'normal_specimen' in d:
             specimen_type = "control"
             spec = d.get('normal_specimen')
             if spec.get('is_aligned'):
                 for task in tasks:
-                    parallel_timings.append(get_parallel_times(spec, task, number_of_processors))
-                # so hungry :(
-                # import pdb; pdb.set_trace()
-                best = parallel_timings[0][0] + parallel_timings[1][0] + parallel_timings[2][0]
-                worst = parallel_timings[0][1] + parallel_timings[1][1] + parallel_timings[2][1]
-                print '\t'.join([d['donor_unique_id'], specimen_type, str(parallel_timings[0][0]),
-                                str(parallel_timings[0][1]), str(parallel_timings[1][0]), str(parallel_timings[1][1]),
-                                str(parallel_timings[2][0]), str(parallel_timings[2][1]), str(best), str(worst)])
+                    parallel_timings.extend(get_parallel_times(spec, task, number_of_processors))
+
+                (full_best, full_worst) = get_best_worst_cases_full_time(parallel_timings)
+                dataline = [d['donor_unique_id'], specimen_type] + parallel_timings + [full_best, full_worst]
+                print('\t'.join(map(str, dataline)))
+
                 controls_counted += 1
                 specimens_counted += 1
-                total_best_time += best
-                total_worse_time += worst
+                total_best_time += full_best
+                total_worse_time += full_worst
+            parallel_timings = []
+
         # process tumour
         if 'aligned_tumor_specimens' in d:
             specimen_type = "tumour"
@@ -167,83 +174,31 @@ def main():
             for spec in specs:
                 if spec.get('is_aligned'):
                     for task in tasks:
-                        parallel_timings.append(get_parallel_times(spec, task, number_of_processors))
+                        parallel_timings.extend(get_parallel_times(spec, task, number_of_processors))
 
-                    best = parallel_timings[0][0] + parallel_timings[1][0] + parallel_timings[2][0]
-                    worst = parallel_timings[0][1] + parallel_timings[1][1] + parallel_timings[2][1]
-                    print '\t'.join([d['donor_unique_id'], specimen_type, str(parallel_timings[0][0]),
-                                    str(parallel_timings[0][1]), str(parallel_timings[1][0]), str(parallel_timings[1][1]),
-                                    str(parallel_timings[2][0]), str(parallel_timings[2][1]), str(best), str(worst)])
+                    (full_best, full_worst) = get_best_worst_cases_full_time(parallel_timings)
+                    dataline = [d['donor_unique_id'], specimen_type] + parallel_timings + [full_best, full_worst]
+                    print('\t'.join(map(str, dataline)))
+
                     specimens_counted += 1
-                    total_best_time += best
-                    total_worse_time += worst
+                    total_best_time += full_best
+                    total_worse_time += full_worst
+            parallel_timings = []
 
     print "\nControls counted:\t%d" % controls_counted
     print "Specimens counted:\t%d" % specimens_counted
     print "\nBased on %dx-parallelization..." % number_of_processors
     print "Total best case time (optimal parallelization):\t%d" % total_best_time
     print "Total worst case time (least optimal parallelization for each specimen):\t%d" % total_worse_time
-    print "Estimated best time per donor (by # of controls):\t%d\tor in days:\t%.1f" %\
-          (total_best_time/controls_counted, total_best_time/controls_counted/3600/24.)
+    print "Estimated best time per donor (by # of controls):\t%d\tor in days:\t%.2f" %\
+          (total_best_time/controls_counted, total_best_time/controls_counted/3600./24.)
     print "Estimated worst time per donor (by # of controls):\t%d\tor in days:\t%.1f" %\
-          (total_worse_time/controls_counted, total_worse_time/controls_counted/3600/24.)
-    print "Estimated best time per specimen:\t%d\tor in days:\t%.1f" %\
-          (total_best_time/specimens_counted, total_best_time/specimens_counted/3600/24.)
-    print "Estimated worst time per specimen:\t%d\tor in days:\t%.1f" %\
-          (total_worse_time/specimens_counted, total_worse_time/specimens_counted/3600/24.)
+          (total_worse_time/controls_counted, total_worse_time/controls_counted/3600./24.)
+    print "Estimated best time per specimen:\t%d\tor in days:\t%.2f" %\
+          (total_best_time/specimens_counted, total_best_time/specimens_counted/3600./24.)
+    print "Estimated worst time per specimen:\t%d\tor in days:\t%.2f" %\
+          (total_worse_time/specimens_counted, total_worse_time/specimens_counted/3600./24.)
 
-
-#______________________________________________
-    # print '\t'.join(["donor_unique_id", "type", "bwa_max", "bwa_sum", "download_max", "download_sum", "merge_max",
-    #                  "merge_sum", "qc_max", "qc_sum", "sum_of_max_times", "sum_all", "no_dl"])
-    # total_time = 0
-    # total_parallel_time = 0
-    # number_donors = 0
-    #
-    # for d in whitelist_donors:
-    #
-    #     # Process the control (there should always be exactly 1)
-    #     if 'normal_specimen' in d:
-    #         specimen_type = "control"
-    #         control_specimen = d.get('normal_specimen')
-    #         if control_specimen.get('is_aligned'):
-    #             lanes_timings = control_specimen.get('alignment').get('timing_metrics')
-    #             times = get_times(lanes_timings)
-    #
-    #         print '\t'.join([d.get('donor_unique_id'), specimen_type, str(times['bwa_max']), str(times['bwa_sum']),
-    #                          str(times['download_max']), str(times['download_sum']), str(times['merge_max']),
-    #                          str(times['merge_sum']), str(times['qc_max']), str(times['qc_sum']),
-    #                          str(times['sum_of_max_times']), str(times['sum_all']), str(times['no_dl'])])
-    #         total_time += times['sum_all']
-    #         total_parallel_time += times['sum_of_max_times']
-    #
-    #     # Process the tumor specimen(s) if they exist
-    #     if 'aligned_tumor_specimens' in d:
-    #         specimen_type = "tumour"
-    #         tumor_specimens = d.get('aligned_tumor_specimens')
-    #         # possibly more than 1 lane for tumor, so need to iterate through
-    #
-    #         for t in tumor_specimens:
-    #             if t.get('is_aligned'):
-    #                 lanes_timings = t.get('alignment').get('timing_metrics')
-    #                 times = get_times(lanes_timings)
-    #             # import pdb; pdb.set_trace()
-    #             print '\t'.join([d.get('donor_unique_id'), specimen_type, str(times['bwa_max']), str(times['bwa_sum']),
-    #                              str(times['download_max']), str(times['download_sum']), str(times['merge_max']),
-    #                              str(times['merge_sum']), str(times['qc_max']), str(times['qc_sum']),
-    #                              str(times['sum_of_max_times']), str(times['sum_all']), str(times['no_dl'])])
-    #             total_time += times['sum_all']
-    #             total_parallel_time += times['sum_of_max_times']
-    #
-    #     number_donors += 1
-    #
-    # print "\nTotal time:\t%d" % total_time
-    # print "Total time with full parallelization within a specimen: \t%d" % total_parallel_time
-    # print "Total donors included:\t%d" % number_donors
-    # time_per_donor_full = total_time / number_donors
-    # time_per_donor_parallel = total_parallel_time / number_donors
-    # print "Time per donor (full):\t%d\tor in days:\t%.1f" % (time_per_donor_full, (time_per_donor_full/3600./24.))
-    # print "Time per donor (full parallelization):\t%d\tor in days:\t%.1f" % (time_per_donor_parallel, (time_per_donor_parallel/3600./24.))
 
 if __name__ == '__main__':
     main()
