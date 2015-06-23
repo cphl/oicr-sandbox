@@ -35,65 +35,6 @@ def select_whitelist_donors():
                 donors.append(j)
     return donors
 
-def get_times(lanes_timings):
-    """ Input is a list of lanes' timings.
-        Grab 4 values from json:    bwa_timing_seconds,
-                                    download_timing_seconds,
-                                    merge_timing_seconds,
-                                    qc_timing_seconds
-        Return dict of...lots of stuff
-    """
-
-    # Assume all lanes run parallel for a particular process. This gives an absolute lower bound (specimen level).
-    bwa_max = 0
-    download_max = 0
-    merge_max = 0
-    qc_max = 0
-    summaxes = 0
-
-    # If all lanes run sequentially for each step, this gives the upper bound. (Absolute wrt these metrics)
-    bwa_sum = 0
-    download_sum = 0
-    merge_sum = 0
-    qc_sum = 0
-    sumsums = 0
-
-    no_dl = 0
-
-    for lane in lanes_timings:
-        if 'metrics' in lane:
-            metrics = lane.get('metrics')
-            bwa = metrics.get('bwa_timing_seconds')
-            download = metrics.get('download_timing_seconds')
-            merge = metrics.get('merge_timing_seconds')
-            qc = metrics.get('qc_timing_seconds')
-
-            bwa_max = max(bwa_max, bwa)
-            download_max = max(download_max, download)
-            merge_max = max(merge_max, merge)
-            qc_max = max(qc_max, qc)
-
-            bwa_sum += bwa
-            download_sum += download
-            merge_sum += merge
-            qc_sum += qc
-
-            sumsums += bwa + merge + qc + download
-            no_dl += bwa + merge + qc
-    summaxes += bwa_max + merge_max + qc_max  + download_max
-
-    return {'bwa_max': bwa_max, 'bwa_sum': bwa_sum, 'download_max': download_max, 'download_sum': download_sum,
-            'merge_max': merge_max, 'merge_sum': merge_sum, 'qc_max': qc_max, 'qc_sum': qc_sum,
-            'sum_of_max_times': summaxes, 'sum_all': sumsums, 'no_dl': no_dl}
-
-
-
-def get_gnos_repo(specimen_key):
-    """This way does not get you the place the workflow was processed. Need to cross reference with whitelists.
-        But maybe it gets us the repo it was downloaded from?
-    """
-    return specimen_key.get('gnos_repo')
-
 
 def get_parallel_times(specimen, task, number_of_processors):
     """Return amount of time it takes for a specimen to finish a task ('bwa', 'merge', or 'qc'),
@@ -127,14 +68,26 @@ def get_best_worst_cases_full_time(timings_list):
     return full_best, full_worst
 
 
+def get_download_data(donor):
+    """Returns: - GNOS repo from which the source data for BWA was taken (lane)
+                - download time (lane)
+    """
+    repo = ""
+    download_timing = 0
+    return repo, download_timing
+
+
+def generate_download_report(donors):
+    """Gather data on download times and from which repo for these donors and generate some stats"""
+    #stub
+    pass
+
+
 def main():
 
     whitelist_donors = select_whitelist_donors()
 
-    # with open('whitelist_donors.jsonl', 'w') as f:
-    #     for wd in whitelist_donors:
-    #         json.dump(wd, f)
-    #         f.flush()
+    generate_download_report(whitelist_donors)
 
     print '\t'.join(["donor_unique_id", "type", "bwa_parallel_best", "bwa_parallel_worst", "merge_parallel_best",
                      "merge_parallel_worst", "qc_parallel_best", "qc_parallel_worst", "full_parallel_best",
@@ -144,7 +97,7 @@ def main():
     controls_counted = 0
     specimens_counted = 0
     total_best_time = 0
-    total_worse_time = 0
+    total_worst_time = 0
     parallel_timings = []
 
     for d in whitelist_donors:
@@ -164,7 +117,7 @@ def main():
                 controls_counted += 1
                 specimens_counted += 1
                 total_best_time += full_best
-                total_worse_time += full_worst
+                total_worst_time += full_worst
             parallel_timings = []
 
         # process tumour
@@ -182,22 +135,22 @@ def main():
 
                     specimens_counted += 1
                     total_best_time += full_best
-                    total_worse_time += full_worst
+                    total_worst_time += full_worst
             parallel_timings = []
 
     print "\nControls counted:\t%d" % controls_counted
     print "Specimens counted:\t%d" % specimens_counted
     print "\nBased on %dx-parallelization..." % number_of_processors
     print "Total best case time (optimal parallelization):\t%d" % total_best_time
-    print "Total worst case time (least optimal parallelization for each specimen):\t%d" % total_worse_time
+    print "Total worst case time (least optimal parallelization for each specimen):\t%d" % total_worst_time
     print "Estimated best time per donor (by # of controls):\t%d\tor in days:\t%.2f" %\
           (total_best_time/controls_counted, total_best_time/controls_counted/3600./24.)
     print "Estimated worst time per donor (by # of controls):\t%d\tor in days:\t%.1f" %\
-          (total_worse_time/controls_counted, total_worse_time/controls_counted/3600./24.)
+          (total_worst_time/controls_counted, total_worst_time/controls_counted/3600./24.)
     print "Estimated best time per specimen:\t%d\tor in days:\t%.2f" %\
           (total_best_time/specimens_counted, total_best_time/specimens_counted/3600./24.)
     print "Estimated worst time per specimen:\t%d\tor in days:\t%.2f" %\
-          (total_worse_time/specimens_counted, total_worse_time/specimens_counted/3600./24.)
+          (total_worst_time/specimens_counted, total_worst_time/specimens_counted/3600./24.)
 
 
 if __name__ == '__main__':
