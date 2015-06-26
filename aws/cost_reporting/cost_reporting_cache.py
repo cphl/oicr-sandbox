@@ -133,8 +133,8 @@ def generate_one_report(keeper):
         writer.writerow({'user:KEEP': "Report for " + keeper + " from start of month to " + str(datetime.date.today())})
         writer.writeheader()
 
-    cost_for_keeper = {'user:KEEP': keeper}
-    # bunch all by non-production, production, or anything else in the list
+        cost_for_keeper = {}
+        # bunch all by non-production, production, or anything else in the list
     for prod_type in prod_types:
         # list of all line_items with that prod type, and process them
         cost_for_this_production_type = process_prod_type([line_item for line_item in line_items if line_item['user:PROD'] == prod_type])
@@ -143,6 +143,13 @@ def generate_one_report(keeper):
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'subtot': "Subtotal for [non-]production:", 'subval': cost_for_this_production_type})
         cost_for_keeper[prod_type] = cost_for_this_production_type
+
+    # K this is ugly but figure it out later
+    with open(report_name, 'a') as f:
+        fields = ['user:KEEP', 'ResourceId', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        total_cost_for_keeper = sum(cost_for_keeper.values())
+        writer.writerow({'subtot': "TOTAL FOR " + keeper, 'subval': str(total_cost_for_keeper)})
 
     return cost_for_keeper
 
@@ -217,13 +224,15 @@ def generate_reports(keepers):
     # Individual full reports
     for keeper in keepers:
         cost_for_keeper = generate_one_report(keeper)
+        cost_for_keeper['user:KEEP'] = keeper
         costs_for_keepers.append(cost_for_keeper)
 
     # Summarize
     print "Generating summary report..."
-    with open('keep+prod_summary.csv', 'w') as f:
+    with open('overall_keep+prod_summary.csv', 'w') as f:
         fields = ['user:KEEP', 'non-production subtotal', 'production subtotal', 'user total']
         writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writerow({'user:KEEP': "Summary of costs from start of month to " + str(datetime.date.today())})
         writer.writeheader()
         writer.writerow({})
         for i in range(len(keepers)):
