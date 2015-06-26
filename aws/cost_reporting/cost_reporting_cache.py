@@ -6,11 +6,6 @@ import csv
 from operator import itemgetter
 import sys
 
-untagged_full_report = 'untagged.csv'
-untagged_summary_report = 'untagged_operations_totals.csv'
-tagged_full_report = 'tagged.csv'
-tagged_summary_report = 'tagged_user_totals.csv'
-
 
 class SpreadsheetCache(object):
     def __init__(self):
@@ -22,6 +17,7 @@ class SpreadsheetCache(object):
                 if row['RecordType'] == "LineItem":
                     if row['Operation'] == "" and row['UsageType'] == "":
                         row['Operation'] = "'ProductName = AWS Support (Developer)'"
+                        row['UsageType'] = "'ProductName = AWS Support (Developer)'"
                     self.spreadsheet.append(row)
 
     def data(self):
@@ -70,12 +66,6 @@ def get_keepers():
     return list(keepers)
 
 
-def subtotal(field_list):
-    """Get subtotal for given fields"""
-    #STUB
-    pass
-
-
 def generate_one_persons_report(keeper):
     """Sort and tabulate totals for any given KEEP-tag, including the blank ones"""
 
@@ -101,7 +91,10 @@ def generate_one_persons_report(keeper):
 
 def process_usage(line_items):
     """Process all the line items with this particular usage type"""
-    report_name = line_items[0].get('user:KEEP') + "_summary.csv"
+    keeper = line_items[0].get('user:KEEP')
+    if keeper == "":
+        keeper = "untagged"
+    report_name = keeper + "_detailed_report.csv"
     cost_for_this_usage = 0
     with open(report_name, 'a') as f:
         fields = ['user:KEEP', 'user:PROD', 'ResourceId', 'Operation', 'UsageType', 'Cost',
@@ -121,7 +114,10 @@ def process_resource(line_items):
     cost_for_this_resource = 0
     for usage_type in usage_types:
         cost_for_this_usage = process_usage([line_item for line_item in line_items if line_item['UsageType'] == usage_type])
-        with open(line_items[0].get('user:KEEP') + "_summary.csv", 'a') as f:
+        keeper = line_items[0].get('user:KEEP')
+        if keeper == "":
+            keeper = "untagged"
+        with open(keeper + "_detailed_report.csv", 'a') as f:
             fields = ['user:KEEP', 'user:PROD', 'ResourceId', 'Operation', 'UsageType', 'Cost',
                       'UsageType Subtotal for this resource', 'Resource Subtotal', 'PROD/not-PROD Subtotal']
             writer = csv.DictWriter(f, fieldnames=fields)
@@ -136,7 +132,10 @@ def process_prod_type(line_items):
     cost_for_this_production_type = 0
     for resource_id in resource_ids:
         cost_for_this_resource = process_resource([line_item for line_item in line_items if line_item['ResourceId'] == resource_id])
-        with open(line_items[0].get('user:KEEP') + "_summary.csv", 'a') as f:
+        keeper = line_items[0].get('user:KEEP')
+        if keeper == "":
+            keeper = "untagged"
+        with open(keeper + "_detailed_report.csv", 'a') as f:
             fields = ['user:KEEP', 'user:PROD', 'ResourceId', 'Operation', 'UsageType', 'Cost',
                       'UsageType Subtotal for this resource', 'Resource Subtotal', 'PROD/not-PROD Subtotal']
             writer = csv.DictWriter(f, fieldnames=fields)
@@ -178,6 +177,63 @@ def generate_one_report(keeper):
 
     return cost_for_keeper
 
+
+def generate_untagged_overview():
+    """Give just the right amount of detail to let us know where all the untagged resources are"""
+    print "Generating untagged overview report..."
+    unkept = [x for x in SC.spreadsheet if x['user:KEEP'] == ""]
+
+    with open("untagged_overview.csv", 'w') as f:
+
+        # costs by resource
+        print " ...by resource..."
+        resource_ids = set([x.get('ResourceId') for x in unkept])
+        fields = ['ResourceId', 'Total cost for resource']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writerow({})
+        writer.writerow({'ResourceId': "Untagged resources, grouped by resource id"})
+        writer.writeheader()
+        list_of_resources = []
+        for resource in resource_ids:
+            resource_total = sum([float(x['Cost']) for x in unkept if x['ResourceId'] == resource])
+            list_of_resources.append(dict(r=resource, c=resource_total))
+        list_of_resources = sorted(list_of_resources, key=itemgetter('c'), reverse=True)
+        for res in list_of_resources:
+            writer.writerow({'ResourceId': res['r'], 'Total cost for resource': res['c']})
+
+        # costs by operation
+        print " ...by operation..."
+        operations = set([x.get('Operation') for x in unkept])
+        fields = ['Operation', 'Total cost for operation']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writerow({})
+        writer.writerow({'Operation': "Untagged resources, costs by Operation"})
+        writer.writeheader()
+        l_o_ops = []
+        for op in operations:
+            op_total = sum([float(x['Cost']) for x in unkept if x['Operation'] == op])
+            l_o_ops.append(dict(o=op, c=op_total))
+        l_o_ops = sorted(l_o_ops, key=itemgetter('c'), reverse=True)
+        for oper in l_o_ops:
+            writer.writerow({'Operation': oper['o'], 'Total cost for operation': oper['c']})
+
+        # costs by usage_type
+        print " ...by usage type..."
+        usage_types = set([x.get('UsageType') for x in unkept])
+        fields = ['UsageType', 'Total cost for UsageType']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writerow({})
+        writer.writerow({'UsageType': "Untagged resources, costs by UsageType"})
+        writer.writeheader()
+        l_o_uses = []
+        for usage in usage_types:
+            usage_total = sum([float(x['Cost']) for x in unkept if x['UsageType'] == usage])
+            l_o_uses.append(dict(u=usage, c=usage_total))
+        l_o_uses = sorted(l_o_uses, key=itemgetter('c'), reverse=True)
+        for use in l_o_uses:
+            writer.writerow({'UsageType': use['u'], 'Total cost for UsageType': use['c']})
+
+
 def generate_reports(keepers):
     """Make reports for list of keepers:
     - individual reports with every line item,
@@ -193,7 +249,7 @@ def generate_reports(keepers):
 
     # Summarize
     print "Generating summary report..."
-    with open('tagged_summary.csv', 'w') as f:
+    with open('keep+prod_summary.csv', 'w') as f:
         fields = ['user:KEEP', 'non-production subtotal', 'production subtotal', 'user total']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
@@ -210,13 +266,14 @@ def generate_reports(keepers):
                              'production subtotal': costs_for_keepers[i]['yes'],
                              'user total': total})
 
+    # Overview of untagged resources
+    generate_untagged_overview()
 
 def main():
     SC.fix_case()
     SC.sort_data()
     keepers = get_keepers()
     generate_reports(keepers)
-
 
 if __name__ == '__main__':
     SC = SpreadsheetCache()
