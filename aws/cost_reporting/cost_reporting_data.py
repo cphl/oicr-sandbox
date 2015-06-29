@@ -21,7 +21,12 @@ class SpreadsheetCache(object):
                     self.spreadsheet.append(row)
         self.fix_case()
         self.sort_data()
+
         self.keepers = set()
+        for row in self.spreadsheet:
+            self.keepers.add(row['user:KEEP'])
+        self.keepers = list(self.keepers)
+
         self.resources_keep_dict = {}  # key = resource id, value = KEEP-tag
         self.get_resource_tags()  # populate above
         self.tag_past_items()
@@ -216,9 +221,9 @@ def generate_untagged_overview():
         resource_ids = set([x.get('ResourceId') for x in unkept])
         fields = ['ProductName', 'ResourceId', 'Total cost for resource']
         writer = csv.DictWriter(f, fieldnames=fields)
-        writer.writerow({'ResourceId': "Untagged resources from start of month to " + str(datetime.date.today())})
+        writer.writerow({'ProductName': "Untagged resources from start of month to " + str(datetime.date.today())})
         writer.writerow({})
-        writer.writerow({'ResourceId': "Untagged resources, grouped by resource id"})
+        writer.writerow({'ProductName': "Untagged resources, grouped by resource id"})
         writer.writeheader()
         list_of_resources = []
         for resource in resource_ids:
@@ -234,43 +239,65 @@ def generate_untagged_overview():
                 product = str(product)
 
             list_of_resources.append(dict(p=product, r=resource, c=resource_total))
-        list_of_resources = sorted(list_of_resources, key=itemgetter('c'), reverse=True)
+        list_of_resources = sorted(list_of_resources, key=itemgetter('p', 'c'), reverse=True)
         for res in list_of_resources:
             writer.writerow({'ProductName': res['p'], 'ResourceId': res['r'], 'Total cost for resource': res['c']})
 
         # costs by operation
         print " ...by operation..."
         operations = set([x.get('Operation') for x in unkept])
-        fields = ['Operation', 'Total cost for operation']
+        fields = ['ProductName', 'Operation', 'Total cost for operation']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({})
         writer.writerow({})
-        writer.writerow({'Operation': "Untagged resources, costs by Operation"})
+        writer.writerow({'ProductName': "Untagged resources, costs by Operation"})
         writer.writeheader()
         l_o_ops = []
         for op in operations:
             op_total = sum([float(x['Cost']) for x in unkept if x['Operation'] == op])
-            l_o_ops.append(dict(o=op, c=op_total))
-        l_o_ops = sorted(l_o_ops, key=itemgetter('c'), reverse=True)
+
+            # Sorry this is awful
+            # expect a resource is of one ProductName type, but if not, dump the list
+            product = [x['ProductName'] for x in unkept if x['ResourceId'] == resource]
+            # This is awful
+            product = list(set(product))
+            if len(product) == 1:
+                product = str(product[0])
+            else:
+                product = str(product)
+
+            l_o_ops.append(dict(p=product, o=op, c=op_total))
+        l_o_ops = sorted(l_o_ops, key=itemgetter('p', 'c'), reverse=True)
         for oper in l_o_ops:
-            writer.writerow({'Operation': oper['o'], 'Total cost for operation': oper['c']})
+            writer.writerow({'ProductName': oper['p'], 'Operation': oper['o'], 'Total cost for operation': oper['c']})
 
         # costs by usage_type
         print " ...by usage type..."
         usage_types = set([x.get('UsageType') for x in unkept])
-        fields = ['UsageType', 'Total cost for UsageType']
+        fields = ['ProductName', 'UsageType', 'Total cost for UsageType']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({})
         writer.writerow({})
-        writer.writerow({'UsageType': "Untagged resources, costs by UsageType"})
+        writer.writerow({'ProductName': "Untagged resources, costs by UsageType"})
         writer.writeheader()
         l_o_uses = []
         for usage in usage_types:
             usage_total = sum([float(x['Cost']) for x in unkept if x['UsageType'] == usage])
-            l_o_uses.append(dict(u=usage, c=usage_total))
-        l_o_uses = sorted(l_o_uses, key=itemgetter('c'), reverse=True)
+
+            # Sorry this is awful, again
+            # expect a resource is of one ProductName type, but if not, dump the list
+            product = [x['ProductName'] for x in unkept if x['ResourceId'] == resource]
+            # This is awful
+            product = list(set(product))
+            if len(product) == 1:
+                product = str(product[0])
+            else:
+                product = str(product)
+
+            l_o_uses.append(dict(p=product, u=usage, c=usage_total))
+        l_o_uses = sorted(l_o_uses, key=itemgetter('p', 'c'), reverse=True)
         for use in l_o_uses:
-            writer.writerow({'UsageType': use['u'], 'Total cost for UsageType': use['c']})
+            writer.writerow({'ProductName': use['p'], 'UsageType': use['u'], 'Total cost for UsageType': use['c']})
 
 
 def generate_reports():
