@@ -27,11 +27,9 @@ class SpreadsheetCache(object):
             self.keepers.add(row['user:KEEP'])
         self.keepers = list(self.keepers)
 
-        self.resources_keep_dict = {}  # key = resource id, value = KEEP-tag
+        self.resources_tag_dict = {}  # key = resource id, value = {'user:KEEP': name, 'user:PROD': yes/}
         self.get_resource_tags()  # populate above
         self.tag_past_items()
-        # initial value for list of untagged items, will have items removed as tagged lists are populated
-        self.unkept = self.spreadsheet
 
     def data(self):
         """Returns spreadsheet (list of dicts)"""
@@ -88,12 +86,15 @@ class SpreadsheetCache(object):
         return line_items_of_keeper
 
     def get_resource_tags(self):
-        """:return: dict of resource_id/KEEP-tag pairs"""
+        """:return: dict of resource_id and {KEEP-tag, PROD-tag}-pairs"""
         for row in self.spreadsheet:
-            if row['ResourceId'] not in self.resources_keep_dict:
-                self.resources_keep_dict[row['ResourceId']] = row['user:KEEP']
-            elif len(row['user:KEEP'].strip()) != 0:
-                self.resources_keep_dict[row['ResourceId']] = row['user:KEEP']
+            if row['ResourceId'] not in self.resources_tag_dict:
+                self.resources_tag_dict[row['ResourceId']] = {'user:KEEP': row['user:KEEP'],
+                                                              'user:PROD': row['user:PROD']}
+            if len(row['user:KEEP'].strip()) != 0:
+                self.resources_tag_dict[row['ResourceId']]['user:KEEP'] = row['user:KEEP']
+            if len(row['user:PROD'].strip()) != 0:
+                self.resources_tag_dict[row['ResourceId']]['user:PROD'] = row['user:PROD']
 
     def tag_past_items(self):
         """Tag untagged items if they became tagged at any time in the billing record"""
@@ -102,8 +103,9 @@ class SpreadsheetCache(object):
         print "Tagging past items"
         for row in self.spreadsheet:
             i += 1
-            if row['ResourceId'] in self.resources_keep_dict:
-                copy_list[i]['user:KEEP'] = self.resources_keep_dict[row['ResourceId']]
+            if row['ResourceId'] in self.resources_tag_dict:
+                copy_list[i]['user:KEEP'] = self.resources_tag_dict[row['ResourceId']]['user:KEEP']
+                copy_list[i]['user:PROD'] = self.resources_tag_dict[row['ResourceId']]['user:PROD']
         self.spreadsheet = list(copy_list)
         del copy_list
 
@@ -141,10 +143,19 @@ def process_resource(line_items):
         keeper = line_items[0].get('user:KEEP')
         if keeper == "":
             keeper = "untagged"
+        # hack hack hack hack
+        zones_full = [item['AvailabilityZone'] for item in line_items if item['UsageType'] == usage_type]
+        zones = list(set(zones_full))
+        zones.reverse()
+        zone = zones[0]
+
+        # import pdb; pdb.set_trace()
+
         with open(keeper + "_report.csv", 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'Operation', 'UsageType', 'Production?', 'Cost']
+            fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'user:KEEP': keeper, 'ResourceId': line_items[0]['ResourceId'],
+                             'AvailabilityZone': zone,
                              'Operation': line_items[0]['Operation'], 'UsageType': usage_type,
                              'Production?': line_items[0]['user:PROD'], 'Cost': usage_cost})
         cost_for_this_resource += usage_cost
@@ -162,7 +173,7 @@ def process_prod_type(line_items):
         if keeper == "":
             keeper = "untagged"
         with open(keeper + "_report.csv", 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+            fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'subtot': "Subtotal for resource " + resource, 'subval': cost_for_this_resource})
         cost_for_this_production_type += cost_for_this_resource
@@ -182,7 +193,7 @@ def generate_one_report(keeper):
     print "Generating report for: " + keeper + "..."
 
     with open(report_name, 'w') as f:
-        fields = ['user:KEEP', 'ResourceId', 'Operation', 'UsageType', 'Production?', 'Cost']
+        fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({})
         writer.writerow({'user:KEEP': "Report for " + keeper + " from start of month to " + str(datetime.date.today())})
@@ -194,14 +205,14 @@ def generate_one_report(keeper):
         # list of all line_items with that prod type, and process them
         cost_for_this_production_type = process_prod_type([line_item for line_item in line_items if line_item['user:PROD'] == prod_type])
         with open(report_name, 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+            fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'subtot': "Subtotal for [non-]production:", 'subval': cost_for_this_production_type})
         cost_for_keeper[prod_type] = cost_for_this_production_type
 
     # K this is ugly but figure it out later
     with open(report_name, 'a') as f:
-        fields = ['user:KEEP', 'ResourceId', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+        fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
         writer = csv.DictWriter(f, fieldnames=fields)
         total_cost_for_keeper = sum(cost_for_keeper.values())
         writer.writerow({'subtot': "TOTAL FOR " + keeper, 'subval': str(total_cost_for_keeper)})
