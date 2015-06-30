@@ -1,6 +1,7 @@
 __author__ = 'cleung'
 
 import boto
+from boto import ec2
 import datetime
 import zipfile
 import os
@@ -12,24 +13,35 @@ class SpreadsheetCache(object):
         self.filename = self.get_file_from_bucket()
         self.spreadsheet = []
         with open(self.filename) as csvfile:
-            tempdata = csv.DictReader(csvfile)
-            for row in tempdata:
+            temp_reader = csv.DictReader(csvfile)
+            for row in temp_reader:
                 if float(row['Cost']) != 0 and row['RecordType'] == "LineItem":
                     if row['Operation'] == "" and row['UsageType'] == "":
                         row['Operation'] = "ProductName" + row['ProductName']
                         row['UsageType'] = "ProductName" + row['ProductName']
                     self.spreadsheet.append(row)
+            del temp_reader
+
         self.fix_case()
         self.sort_data()
 
-        self.keepers = set()
+        temp_keepers = set()
         for row in self.spreadsheet:
-            self.keepers.add(row['user:KEEP'])
-        self.keepers = list(self.keepers)
+            temp_keepers.add(row['user:KEEP'])
+        self.keepers = list(temp_keepers)
+        del temp_keepers
 
         self.resources_tag_dict = {}  # key = resource id, value = {'user:KEEP': name, 'user:PROD': yes/}
-        self.get_resource_tags()  # populate above
+        self.get_resource_tags()  # populate above dictionary
+        # import pdb; pdb.set_trace()
         self.tag_past_items()
+
+        regions = self.get_regions()
+        self.live_resources = []
+        for region in regions:
+            self.live_resources.extend(self.get_instance_ids(region))
+            self.live_resources.extend(self.get_volume_ids(region))
+            # detailed billing report from Amazon does not show snapshot or image IDs :(
 
     def data(self):
         """Returns spreadsheet (list of dicts)"""
@@ -38,9 +50,12 @@ class SpreadsheetCache(object):
     def fix_case(self):
         # A method to operate on the spreadsheet and update the column you need uppered
         # Doesn't return anything, just fixes the spreadsheet
-        for line in self.spreadsheet:
+        temp_sheet = list(self.spreadsheet)
+        for line in temp_sheet:
             line['user:KEEP'] = line['user:KEEP'].upper()
             line['user:PROD'] = line['user:PROD'].lower()
+        self.spreadsheet = list(temp_sheet)
+        del temp_sheet
 
     def get_file_from_bucket(self):
         """Grab today's billing report from the S3 bucket, extract into pwd"""
@@ -60,33 +75,16 @@ class SpreadsheetCache(object):
             zf.extractall()
         return csv_filename
 
+################### This changes cost totals, but I don't know why. Suggests a problem in calculations though
     def sort_data(self):
         """Sort data by ResourceId, KEEP, PROD, Operation, UsageType, Cost"""
-        self.spreadsheet = sorted(self.spreadsheet, key=itemgetter('ResourceId', 'user:KEEP', 'user:PROD',
-                                                                   'Operation', 'UsageType', 'Cost'))
-
-    def get_resources_for_one_keeper(self, keeper):
-        """ Includes resources untagged earlier, if they are tagged on the day of billing data download.
-        Alters running list of untagged resource line items.
-        :param keeper: String representing the person associated with the resources
-        :return: List of dicts, each dict is one line item belonging to the keeper
-        """
-        line_items_of_keeper = []
-        resource_ids = set()
-        for row in self.spreadsheet:
-            if row['user:KEEP'] == keeper:
-                resource_ids.add(row['ResourceId'])
-                print "."
-        # Now (go back in time and) grab all the line items with these resource IDs even if untagged in past
-        for row in self.spreadsheet:
-            if row['ResourceId'] in resource_ids:
-                print "-"
-                line_items_of_keeper.append(row)
-                self.unkept.remove(row)
-        return line_items_of_keeper
+        temp_sheet = list(self.spreadsheet)
+        self.spreadsheet = list(sorted(temp_sheet, key=itemgetter('ResourceId', 'user:KEEP', 'user:PROD',
+                                                                  'Operation', 'UsageType', 'Cost')))
+        del temp_sheet
 
     def get_resource_tags(self):
-        """:return: dict of resource_id and {KEEP-tag, PROD-tag}-pairs"""
+        """Modifies (populates) dict of resource_id and {KEEP-tag, PROD-tag}-pairs"""
         for row in self.spreadsheet:
             if row['ResourceId'] not in self.resources_tag_dict:
                 self.resources_tag_dict[row['ResourceId']] = {'user:KEEP': row['user:KEEP'],
@@ -96,6 +94,7 @@ class SpreadsheetCache(object):
             if len(row['user:PROD'].strip()) != 0:
                 self.resources_tag_dict[row['ResourceId']]['user:PROD'] = row['user:PROD']
 
+########### NOT running this will give the same totals as raw data
     def tag_past_items(self):
         """Tag untagged items if they became tagged at any time in the billing record"""
         copy_list = list(self.spreadsheet)
@@ -108,6 +107,63 @@ class SpreadsheetCache(object):
                 copy_list[i]['user:PROD'] = self.resources_tag_dict[row['ResourceId']]['user:PROD']
         self.spreadsheet = list(copy_list)
         del copy_list
+
+    def get_regions(self):
+        regions = ec2.regions()
+        region_names = []
+        for region in regions:
+            region_names.append(region.name)
+        return region_names
+
+    def credentials(self):
+        return {"aws_access_key_id": os.environ['AWS_ACCESS_KEY'],
+                "aws_secret_access_key": os.environ['AWS_SECRET_KEY']}
+
+    def get_instance_ids(self, region):
+        """Return names only"""
+        creds = self.credentials()
+        try:
+            conn = ec2.connect_to_region(region, **creds)
+            instance_ids = []
+            reservations = conn.get_all_reservations()
+            for reservation in reservations:
+                for instance in reservation.instances:
+                    instance_ids.append(instance.id.encode())
+        except boto.exception.EC2ResponseError:
+            return []
+        return instance_ids
+
+    def get_volume_ids(self, region):
+        """Return names only"""
+        creds = self.credentials()
+        try:
+            conn = ec2.connect_to_region(region, **creds)
+            volumes = conn.get_all_volumes()
+        except boto.exception.EC2ResponseError:
+            return []
+        volume_ids = []
+        for volume in volumes:
+            volume_ids.append(volume.id.encode())
+        return volume_ids
+
+    def get_snapshots(self, region):
+        creds = self.credentials()
+        try:
+            conn = ec2.connect_to_region(region, **creds)
+            snapshots = conn.get_all_snapshots(owner='self')
+        except boto.exception.EC2ResponseError:
+            return []
+        return snapshots
+
+    def get_images(self, region):
+        """Return images for one given region, owned by self"""
+        creds = self.credentials()
+        try:
+            conn = ec2.connect_to_region(region, **creds)
+            images = conn.get_all_images(owners=['self'])
+        except boto.exception.EC2ResponseError:
+            return []
+        return images
 
 def print_data():
     """Dump everything to take a look"""
@@ -133,7 +189,7 @@ def subtotal(line_items):
     return total_cost
 
 
-def process_resource(line_items):
+def process_resource(line_items, res_id):
     """Process all the line items with this particular resource ID"""
     usage_types = set([x.get('UsageType') for x in line_items])
     cost_for_this_resource = 0
@@ -149,13 +205,15 @@ def process_resource(line_items):
         zones.reverse()
         zone = zones[0]
 
-        # import pdb; pdb.set_trace()
+        status = ""
+        if res_id in SC.live_resources:
+            status = "confirmed live"
 
         with open(keeper + "_report.csv", 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
+            fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
             writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writerow({'user:KEEP': keeper, 'ResourceId': line_items[0]['ResourceId'],
-                             'AvailabilityZone': zone,
+            writer.writerow({'user:KEEP': keeper, 'ResourceId': res_id,
+                              'Status, if available': status,'AvailabilityZone': zone,
                              'Operation': line_items[0]['Operation'], 'UsageType': usage_type,
                              'Production?': line_items[0]['user:PROD'], 'Cost': usage_cost})
         cost_for_this_resource += usage_cost
@@ -168,12 +226,12 @@ def process_prod_type(line_items):
     resources = set([x.get('ResourceId') for x in line_items])
     cost_for_this_production_type = 0
     for resource in resources:
-        cost_for_this_resource = process_resource([x for x in line_items if x['ResourceId'] == resource])
+        cost_for_this_resource = process_resource([x for x in line_items if x['ResourceId'] == resource], resource)
         keeper = line_items[0].get('user:KEEP')
         if keeper == "":
             keeper = "untagged"
         with open(keeper + "_report.csv", 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+            fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'subtot': "Subtotal for resource " + resource, 'subval': cost_for_this_resource})
         cost_for_this_production_type += cost_for_this_resource
@@ -193,7 +251,7 @@ def generate_one_report(keeper):
     print "Generating report for: " + keeper + "..."
 
     with open(report_name, 'w') as f:
-        fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
+        fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({})
         writer.writerow({'user:KEEP': "Report for " + keeper + " from start of month to " + str(datetime.date.today())})
@@ -205,14 +263,16 @@ def generate_one_report(keeper):
         # list of all line_items with that prod type, and process them
         cost_for_this_production_type = process_prod_type([line_item for line_item in line_items if line_item['user:PROD'] == prod_type])
         with open(report_name, 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+            fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
             writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writerow({'subtot': "Subtotal for [non-]production:", 'subval': cost_for_this_production_type})
+            writer.writerow({})
+            writer.writerow({'subtot': "Subtotal for [non/]production:", 'subval': cost_for_this_production_type})
+            writer.writerow({})
         cost_for_keeper[prod_type] = cost_for_this_production_type
 
     # K this is ugly but figure it out later
     with open(report_name, 'a') as f:
-        fields = ['user:KEEP', 'ResourceId', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+        fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
         writer = csv.DictWriter(f, fieldnames=fields)
         total_cost_for_keeper = sum(cost_for_keeper.values())
         writer.writerow({'subtot': "TOTAL FOR " + keeper, 'subval': str(total_cost_for_keeper)})
@@ -230,7 +290,7 @@ def generate_untagged_overview():
         # costs by resource
         print " ...by resource..."
         resource_ids = set([x.get('ResourceId') for x in unkept])
-        fields = ['ProductName', 'ResourceId', 'Total cost for resource']
+        fields = ['ProductName', 'ResourceId', 'Resource Status (unknown unless available)', 'Total cost for resource']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({'ProductName': "Untagged resources from start of month to " + str(datetime.date.today())})
         writer.writerow({})
@@ -249,10 +309,15 @@ def generate_untagged_overview():
             else:
                 product = str(product)
 
-            list_of_resources.append(dict(p=product, r=resource, c=resource_total))
+            status = ""
+            if resource in SC.live_resources:
+                status = "confirmed live"
+
+            list_of_resources.append(dict(p=product, r=resource, s=status, c=resource_total))
         list_of_resources = sorted(list_of_resources, key=itemgetter('p', 'c'), reverse=True)
         for res in list_of_resources:
-            writer.writerow({'ProductName': res['p'], 'ResourceId': res['r'], 'Total cost for resource': res['c']})
+            writer.writerow({'ProductName': res['p'], 'ResourceId': res['r'], 'Resource Status (unknown unless available)': res['s'],
+                             'Total cost for resource': res['c']})
 
         # costs by operation
         print " ...by operation..."
@@ -348,9 +413,12 @@ def generate_reports():
     # Overview of untagged resources
     generate_untagged_overview()
 
+
 def main():
-    # print_data()
+    print_data()
+
     # import pdb; pdb.set_trace()
+    # generate_one_report('BRIAN')
     generate_reports()
 
 if __name__ == '__main__':
