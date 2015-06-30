@@ -33,14 +33,13 @@ class SpreadsheetCache(object):
 
         self.resources_tag_dict = {}  # key = resource id, value = {'user:KEEP': name, 'user:PROD': yes/}
         self.get_resource_tags()  # populate above dictionary
-        # import pdb; pdb.set_trace()
         self.tag_past_items()
 
         regions = self.get_regions()
         self.live_resources = []
         for region in regions:
-            self.live_resources.extend(self.get_instance_ids(region))
-            self.live_resources.extend(self.get_volume_ids(region))
+            self.live_resources.extend(self.get_instances(region))
+            self.live_resources.extend(self.get_volumes(region))
             # detailed billing report from Amazon does not show snapshot or image IDs :(
 
     def data(self):
@@ -119,21 +118,21 @@ class SpreadsheetCache(object):
         return {"aws_access_key_id": os.environ['AWS_ACCESS_KEY'],
                 "aws_secret_access_key": os.environ['AWS_SECRET_KEY']}
 
-    def get_instance_ids(self, region):
+    def get_instances(self, region):
         """Return names only"""
         creds = self.credentials()
         try:
             conn = ec2.connect_to_region(region, **creds)
-            instance_ids = []
+            instances = []
             reservations = conn.get_all_reservations()
             for reservation in reservations:
                 for instance in reservation.instances:
-                    instance_ids.append(instance.id.encode())
+                    instances.append(instance)
         except boto.exception.EC2ResponseError:
             return []
-        return instance_ids
+        return instances
 
-    def get_volume_ids(self, region):
+    def get_volumes(self, region):
         """Return names only"""
         creds = self.credentials()
         try:
@@ -141,10 +140,7 @@ class SpreadsheetCache(object):
             volumes = conn.get_all_volumes()
         except boto.exception.EC2ResponseError:
             return []
-        volume_ids = []
-        for volume in volumes:
-            volume_ids.append(volume.id.encode())
-        return volume_ids
+        return volumes
 
     def get_snapshots(self, region):
         creds = self.credentials()
@@ -199,21 +195,25 @@ def process_resource(line_items, res_id):
         keeper = line_items[0].get('user:KEEP')
         if keeper == "":
             keeper = "untagged"
-        # hack hack hack hack
+
+        # hack hack hack hack, super sneaky
         zones_full = [item['AvailabilityZone'] for item in line_items if item['UsageType'] == usage_type]
         zones = list(set(zones_full))
         zones.reverse()
-        zone = zones[0]
+        zone = zones[0]  # first: low quality pass
 
         status = ""
-        if res_id in SC.live_resources:
+        if res_id in [x.id.encode() for x in SC.live_resources]:
             status = "confirmed live"
+            if len(zone.strip()) == 0:  #if first pass bad, try here!
+                if [x for x in SC.live_resources if x['ResourceId'] == res_id][0].has_key['zone']:
+                    zone = [x for x in SC.live_resources if x['ResourceId'] == res_id][0]['zone']
 
         with open(keeper + "_report.csv", 'a') as f:
             fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'user:KEEP': keeper, 'ResourceId': res_id,
-                              'Status, if available': status,'AvailabilityZone': zone,
+                             'Status, if available': status,'AvailabilityZone': zone,
                              'Operation': line_items[0]['Operation'], 'UsageType': usage_type,
                              'Production?': line_items[0]['user:PROD'], 'Cost': usage_cost})
         cost_for_this_resource += usage_cost
@@ -418,8 +418,8 @@ def main():
     print_data()
 
     # import pdb; pdb.set_trace()
-    # generate_one_report('BRIAN')
-    generate_reports()
+    generate_one_report('DENIS')
+    # generate_reports()
 
 if __name__ == '__main__':
     SC = SpreadsheetCache()
