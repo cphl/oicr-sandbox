@@ -279,7 +279,6 @@ def generateInfoSnapshots(regions):
         f2.write(
             "Name_(if_available)\tsnapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
         for s in snapshots:
-            # import pdb; pdb.set_trace()
             f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
                      % (s['Name'], s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'],
                         s['start_time'], s['status'], s['region'], s['progress'], s['volume_id'], s['volume_size']))
@@ -290,13 +289,14 @@ def generateInfoInstances(regions):
     print "Writing instances info to output file %s" % instances_data_output_file
     with open(instances_data_output_file, 'w') as f3:
         f3.write("INSTANCES\n")
-        f3.write("instance ID\tKEEP-tag\tproduction\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
+        f3.write("Name_(if_available)\tinstance ID\tKEEP-tag\tproduction\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
         for region in regions:
             print "."  # feedback for user
             instances = getInstances(region)
             for i in instances:
-                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
-                    i.id, getKeepTag(i), isProduction(i), i.instance_type, i.state, i.launch_time, getGroups(i), i.region.name))
+                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                         % (get_name_tag(i), i.id, getKeepTag(i), isProduction(i), i.instance_type, i.state,
+                            i.launch_time, getGroups(i), i.region.name))
 
 
 def generateInfoImages(regions):
@@ -345,8 +345,8 @@ def main():
     #################################################
 
     # generateInfoVolumes(regions)
-    generateInfoSnapshots(regions)
-    # generateInfoInstances(regions)
+    # generateInfoSnapshots(regions)
+    generateInfoInstances(regions)
     # generateInfoImages(regions)
 
 
