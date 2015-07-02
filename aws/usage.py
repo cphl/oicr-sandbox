@@ -140,6 +140,7 @@ def getSnapshotsD(region):
                          "volume_id": s.volume_id,
                          "volume_size": s.volume_size,
                          "KEEP-tag": getKeepTag(s),
+                         "Name": get_name_tag(s),
                          "AMI(s)": amiIds,
                          "AMI_KEEP-tags": amiKeeps,
                          "PROD": isProduction(s)
@@ -278,9 +279,10 @@ def generateInfoSnapshots(regions):
         f2.write(
             "Name_(if_available)\tsnapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
         for s in snapshots:
+            # import pdb; pdb.set_trace()
             f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                     % (get_name_tag(s), s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'], s['start_time'], s['status'],
-                        s['region'], s['progress'], s['volume_id'], s['volume_size']))
+                     % (s['Name'], s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'],
+                        s['start_time'], s['status'], s['region'], s['progress'], s['volume_id'], s['volume_size']))
 
 
 def generateInfoInstances(regions):
@@ -342,8 +344,8 @@ def main():
     #                                               #
     #################################################
 
-    generateInfoVolumes(regions)
-    # generateInfoSnapshots(regions)
+    # generateInfoVolumes(regions)
+    generateInfoSnapshots(regions)
     # generateInfoInstances(regions)
     # generateInfoImages(regions)
 
