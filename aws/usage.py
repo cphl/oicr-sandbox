@@ -216,6 +216,13 @@ def isProduction(obj):
     return 'PROD' in obj.tags  # This is deprecated? obj.tags.has_key('PROD')
 
 
+def get_name_tag(obj):
+    """Name is a tag that might not exist, but if it does, it's very helpful for users to identify their resources"""
+    if 'Name' in obj.tags:
+        return obj.tags['Name']
+    else:
+        return ""
+
 def getGroups(instance):
     if len(instance.groups) == 1:
         # if there's only one group, then unpack it
@@ -249,13 +256,13 @@ def generateInfoVolumes(regions):
     with open(volumes_data_output_file, 'w') as f1:
         f1.write("VOLUMES\n")
         f1.write(
-            "volume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tassociated_instance\tstate\tsize\tcreate_time\tregion\tzone\tassociated_snapshot\n\n")
+            "Name_(if_available)\tvolume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tvolume_attachment_state\tassociated_instance\tinstance_state\tsize\tcreate_time\tregion\tzone\tassociated_snapshot\n\n")
         for r in regions:
             volumes = getVolumes(r)
             print "."  # give some feedback to the user
             for v in volumes:
-                f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), isProduction(v), v.attach_data.instance_id, v.status, v.size,
+                f1.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                         % (get_name_tag(v), v.id, getKeepTag(v), getKeepTag(getInstanceOf(v)), isProduction(v), v.attachment_state(), v.attach_data.instance_id, v.status, v.size,
                             v.create_time, v.region.name, v.zone, v.snapshot_id))
 
 
@@ -269,10 +276,10 @@ def generateInfoSnapshots(regions):
     with open(snapshots_data_output_file, 'w') as f2:
         f2.write("SNAPSHOTS\n")
         f2.write(
-            "snapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
+            "Name_(if_available)\tsnapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
         for s in snapshots:
-            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                     % (s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'], s['start_time'], s['status'],
+            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                     % (get_name_tag(s), s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'], s['start_time'], s['status'],
                         s['region'], s['progress'], s['volume_id'], s['volume_size']))
 
 
@@ -299,12 +306,20 @@ def generateInfoImages(regions):
             print "."  # feedback for user
             images = getImagesD(r)
             for im in images:
+
+                # format multiple snapshots better (only a handful, but it will mess up columns if comma-delimited
+                if len(im['snapshots']) == 1:
+                    snaps = im['snapshots'][0]
+                else:
+                    snaps = ""
+                    for s in im['snapshots']:
+                        snaps += s + " "
+
                 f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (im['id'], im['KEEP'], im['PROD'], im['name'], im['region'], im['state'], im['created'], im['type'],
-                            im['snapshots'], im['description']))
+                         % (im['id'], im['KEEP'], im['PROD'], im['name'], im['region'], im['state'], im['created'],
+                            im['type'], snaps, im['description']))
 
 
-# TODO: future? add time-passed since launch
 # TODO: possibility? have these reports accessible from s3, public url, cronjob
 
 
@@ -328,9 +343,9 @@ def main():
     #################################################
 
     generateInfoVolumes(regions)
-    generateInfoSnapshots(regions)
-    generateInfoInstances(regions)
-    generateInfoImages(regions)
+    # generateInfoSnapshots(regions)
+    # generateInfoInstances(regions)
+    # generateInfoImages(regions)
 
 
 if __name__ == '__main__':
