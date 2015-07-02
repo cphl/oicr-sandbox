@@ -20,11 +20,11 @@ class Resource(object):
         self.res_type = res_type
         self.spreadsheet = []
         # populate depending on type
-        # if self.res_type == "volume":
-        #     populate_volumes(self)
+        if self.res_type == "volume":
+            self.populate_volumes()
         # elif self.res_type == "snapshots":
         #     populate_snapshots(self)
-        if self.res_type == "instance":
+        elif self.res_type == "instance":
             self.populate_instances()
         # elif self.res_type == "image":
         #     populate_images(self)
@@ -38,8 +38,27 @@ class Resource(object):
         return region_names
 
     @staticmethod
+    def get_volumes(region):
+        """Return list of whole volumes for a given region"""
+        credentials = get_credentials()
+        try:
+            conn = ec2.connect_to_region(region, **credentials)
+            region_volumes = conn.get_all_volumes()
+        except boto.exception.EC2ResponseError:
+            return []  # This better not fail silently or I'll cut a person.
+        return region_volumes
+
+    @staticmethod
+    def get_all_volumes():
+        regions = Resource.get_regions()
+        all_volumes = []
+        for region in regions:
+            all_volumes.extend(Resource.get_volumes(region))
+        return all_volumes
+
+    @staticmethod
     def get_instances(region):
-        """Return list of whole instances from given region"""
+        """Return list of whole instances for given region"""
         credentials = get_credentials()
         try:
             conn = ec2.connect_to_region(region, **credentials)
@@ -80,14 +99,34 @@ class Resource(object):
     def is_production(obj):
         return 'PROD' in obj.tags
 
+    def populate_volumes(self):
+        """Make a list of dictionaries representing volumes."""
+        volumes = Resource.get_all_volumes()
+        for i in volumes:
+            import pdb; pdb.set_trace()
+
+            # handle associated instance's KEEP-tag
+            associated_instance_id = i.attach_data.instance_id.encode()
+            instance_keep_tag = (j for j in Ins.spreadsheet if j["id"] == associated_instance_id).next()['KEEP_tag']
+            # oh heck yes!
+            self.spreadsheet.append(
+                dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
+                     instance_KEEP_tag=instance_keep_tag, associated_instance_id=associated_instance_id,
+                     PROD_tag=Resource.is_production(i),
+                     ##### TODO: Start checking values from here ###
+
+                     instance_type=i.instance_type, state=i.state,
+                     launched=i.launch_time, region=i.region.name))
+
     def populate_instances(self):
         """Make a list of dictionaries with the all fields we want"""
         instances = Resource.get_all_instances()
-        for instance in instances:
+        for i in instances:
             self.spreadsheet.append(
-                dict(Name_tag=Resource.get_name_tag(instance), id=instance.id, KEEP_tag=Resource.get_keep_tag(instance),
-                     PROD_tag=Resource.is_production(instance), instance_type=instance.instance_type,
-                     state=instance.state, launched=instance.launch_time, region=instance.region.name))
+                dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
+                     PROD_tag=Resource.is_production(i), instance_type=i.instance_type, state=i.state,
+                     launched=i.launch_time, region=i.region.name))
+
 
 def get_credentials():
     return {"aws_access_key_id": os.environ['AWS_ACCESS_KEY'],
@@ -109,8 +148,8 @@ def main():
 
 
 if __name__ == '__main__':
-    # Vols = Resource('volume')
-    # Snaps = Resource('snapshot')
     Ins = Resource('instance')
+    Vols = Resource('volume')
+    # Snaps = Resource('snapshot')
     # Ims = Resource('image')
     main()
