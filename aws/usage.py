@@ -101,7 +101,7 @@ def getImagesD(region):
                      "created": im.creationDate,
                      "type": im.type,
                      "KEEP": getKeepTag(im),
-                     "Name": get_name_tag(im),
+                     "name_tag": get_name_tag(im),
                      "snapshots": getSnapshotsOf(im),
                      "description": im.description,
                      "PROD": isProduction(im)
@@ -306,7 +306,7 @@ def generateInfoImages(regions):
     print "Writing images info to output file %s" % images_data_output_file
     with open(images_data_output_file, 'w') as f4:
         f4.write("IMAGES\n")
-        f4.write("Name\timage_id\tKEEP-tag\tproduction?\timage_name\tregion\tstate\tcreated\ttype\tassociated_snapshots\tdescription\n\n")
+        f4.write("AMI_name\talternative_name\timage_id\tKEEP-tag\tproduction?\tregion\tstate\tcreated\ttype\tassociated_snapshots\tdescription\n\n")
         for r in regions:
             print "."  # feedback for user
             images = getImagesD(r)
@@ -321,7 +321,7 @@ def generateInfoImages(regions):
                         snaps += s + " "
 
                 f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (im['Name'], im['id'], im['KEEP'], im['PROD'], im['name'], im['region'], im['state'],
+                         % (im['name'], im['name_tag'], im['id'], im['KEEP'], im['PROD'], im['region'], im['state'],
                             im['created'], im['type'], snaps, im['description']))
 
 
@@ -347,9 +347,9 @@ def main():
     #                                               #
     #################################################
 
-    generateInfoVolumes(regions)
-    generateInfoSnapshots(regions)
-    generateInfoInstances(regions)
+    # generateInfoVolumes(regions)
+    # generateInfoSnapshots(regions)
+    # generateInfoInstances(regions)
     generateInfoImages(regions)
 
 
