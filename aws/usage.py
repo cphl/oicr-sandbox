@@ -101,6 +101,7 @@ def getImagesD(region):
                      "created": im.creationDate,
                      "type": im.type,
                      "KEEP": getKeepTag(im),
+                     "Name": get_name_tag(im),
                      "snapshots": getSnapshotsOf(im),
                      "description": im.description,
                      "PROD": isProduction(im)
@@ -111,7 +112,7 @@ def getImagesD(region):
 
 def getSnapshotsD(region):
     """ return a list of dictionaries representing snapshots from one region """
-    ### Can a snapshot belong to more than one AMI? Dunno, keep list just in case
+    # Can a snapshot belong to more than one AMI? Dunno, keep list just in case (so it never breaks due to it)
     snapshots = getSnapshots(region)
     snapshotsDicts = []
     ims = getImages(region)
@@ -143,7 +144,8 @@ def getSnapshotsD(region):
                          "Name": get_name_tag(s),
                          "AMI(s)": amiIds,
                          "AMI_KEEP-tags": amiKeeps,
-                         "PROD": isProduction(s)
+                         "PROD": isProduction(s),
+                         "Description": s.description
                          }
         snapshotsDicts.append(snapshotsDict)
     return snapshotsDicts
@@ -257,7 +259,7 @@ def generateInfoVolumes(regions):
     with open(volumes_data_output_file, 'w') as f1:
         f1.write("VOLUMES\n")
         f1.write(
-            "Name_(if_available)\tvolume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tvolume_attachment_state\tassociated_instance\tinstance_state\tsize\tcreate_time\tregion\tzone\tassociated_snapshot\n\n")
+            "Name\tvolume_ID\tKEEP-tag_of_volume\tKEEP-tag_of_instance\tproduction?\tvolume_attachment_state\tassociated_instance\tinstance_state\tsize\tcreate_time\tregion\tzone\tassociated_snapshot\n\n")
         for r in regions:
             volumes = getVolumes(r)
             print "."  # give some feedback to the user
@@ -277,11 +279,12 @@ def generateInfoSnapshots(regions):
     with open(snapshots_data_output_file, 'w') as f2:
         f2.write("SNAPSHOTS\n")
         f2.write(
-            "Name_(if_available)\tsnapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus\tregion\tprogress\tassociated_volume\tvolume_size\n\n")
+            "Name\tsnapshot_id\tKEEP-tag_of_snapshot\tKEEP-tag_of_AMI\tproduction?\tassociated_AMI\tstart_time\tstatus"
+            "\tregion\tprogress\tassociated_volume\tvolume_size\tdescription\n\n")
         for s in snapshots:
-            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                     % (s['Name'], s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'],
-                        s['start_time'], s['status'], s['region'], s['progress'], s['volume_id'], s['volume_size']))
+            f2.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                     % (s['Name'], s['id'], s['KEEP-tag'], s['AMI_KEEP-tags'], s['PROD'], s['AMI(s)'], s['start_time'],
+                        s['status'], s['region'], s['progress'], s['volume_id'], s['volume_size'], s['Description']))
 
 
 def generateInfoInstances(regions):
@@ -289,12 +292,12 @@ def generateInfoInstances(regions):
     print "Writing instances info to output file %s" % instances_data_output_file
     with open(instances_data_output_file, 'w') as f3:
         f3.write("INSTANCES\n")
-        f3.write("Name_(if_available)\tinstance ID\tKEEP-tag\tproduction\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
+        f3.write("Name\tinstance ID\tKEEP-tag\tproduction\tinstance_type\tstate\tlaunched\tsecurity_groups\tregion\n\n")
         for region in regions:
             print "."  # feedback for user
             instances = getInstances(region)
             for i in instances:
-                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                f3.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
                          % (get_name_tag(i), i.id, getKeepTag(i), isProduction(i), i.instance_type, i.state,
                             i.launch_time, getGroups(i), i.region.name))
 
@@ -303,7 +306,7 @@ def generateInfoImages(regions):
     print "Writing images info to output file %s" % images_data_output_file
     with open(images_data_output_file, 'w') as f4:
         f4.write("IMAGES\n")
-        f4.write("image_id\tKEEP-tag\tproduction?\timage_name\tregion\tstate\tcreated\ttype\tassociated_snapshots\tdescription\n\n")
+        f4.write("Name\timage_id\tKEEP-tag\tproduction?\timage_name\tregion\tstate\tcreated\ttype\tassociated_snapshots\tdescription\n\n")
         for r in regions:
             print "."  # feedback for user
             images = getImagesD(r)
@@ -317,9 +320,9 @@ def generateInfoImages(regions):
                     for s in im['snapshots']:
                         snaps += s + " "
 
-                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
-                         % (im['id'], im['KEEP'], im['PROD'], im['name'], im['region'], im['state'], im['created'],
-                            im['type'], snaps, im['description']))
+                f4.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+                         % (im['Name'], im['id'], im['KEEP'], im['PROD'], im['name'], im['region'], im['state'],
+                            im['created'], im['type'], snaps, im['description']))
 
 
 # TODO: possibility? have these reports accessible from s3, public url, cronjob
@@ -344,10 +347,10 @@ def main():
     #                                               #
     #################################################
 
-    # generateInfoVolumes(regions)
-    # generateInfoSnapshots(regions)
+    generateInfoVolumes(regions)
+    generateInfoSnapshots(regions)
     generateInfoInstances(regions)
-    # generateInfoImages(regions)
+    generateInfoImages(regions)
 
 
 if __name__ == '__main__':
