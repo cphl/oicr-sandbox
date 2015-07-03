@@ -18,14 +18,14 @@ images_data_output_file = "images.tsv"
 class Resource(object):
     def __init__(self, res_type):
         self.res_type = res_type
-        self.spreadsheet = []
+        self.spreadsheet = {}
         # populate depending on type
-        if self.res_type == "volume":
-            self.populate_volumes()
+        if self.res_type == "instance":
+            self.populate_instances()
         # elif self.res_type == "snapshots":
         #     populate_snapshots(self)
-        elif self.res_type == "instance":
-            self.populate_instances()
+        elif self.res_type == "volume":
+            self.populate_volumes()
         # elif self.res_type == "image":
         #     populate_images(self)
 
@@ -89,7 +89,7 @@ class Resource(object):
 
     @staticmethod
     def get_keep_tag(obj):
-        """Get the KEEP tag, if it exists. Empty strings count as untagged in this version."""
+        """Get the KEEP tag from source, if it exists. Empty strings count as untagged in this version."""
         if 'KEEP' in obj.tags and len(obj.tags['KEEP'].strip()) != 0:
             return obj.tags['KEEP']
         else:
@@ -101,31 +101,40 @@ class Resource(object):
 
     def populate_volumes(self):
         """Make a list of dictionaries representing volumes."""
+        print "Populating volumes dictionary..."
         volumes = Resource.get_all_volumes()
         for i in volumes:
-            import pdb; pdb.set_trace()
 
             # handle associated instance's KEEP-tag
-            associated_instance_id = i.attach_data.instance_id.encode()
-            instance_keep_tag = (j for j in Ins.spreadsheet if j["id"] == associated_instance_id).next()['KEEP_tag']
-            # oh heck yes!
-            self.spreadsheet.append(
-                dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
-                     instance_KEEP_tag=instance_keep_tag, associated_instance_id=associated_instance_id,
-                     PROD_tag=Resource.is_production(i),
-                     ##### TODO: Start checking values from here ###
+            associated_instance_id = i.attach_data.instance_id
 
-                     instance_type=i.instance_type, state=i.state,
-                     launched=i.launch_time, region=i.region.name))
+            # instance_keep_tag = (j for j in Ins.spreadsheet if j["id"] == associated_instance_id).next()['KEEP_tag']
+            # TODO: only kinda works but maybe better if I did a look-up on a dict of dicts, could timeit later.
+            # TODO: would be nice to figure out what the error means: StopIteration exception
+
+            if associated_instance_id is None:  # sometimes there is no attached instance
+                instance_keep_tag = "-------no-instance-found"
+            else:
+                instance_keep_tag = Ins.spreadsheet[associated_instance_id]['KEEP_tag']
+            print "."
+            self.spreadsheet[i.id] = dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
+                                          instance_KEEP_tag=instance_keep_tag,
+                                          associated_instance_id=associated_instance_id,
+                                          PROD_tag=Resource.is_production(i), attachment_state=i.attachment_state(),
+                                          state=i.volume_state(), status=i.status, iops=i.iops, size=i.size,
+                                          created=i.create_time, region=i.region.name)
 
     def populate_instances(self):
-        """Make a list of dictionaries with the all fields we want"""
+        """Make a dictionary of dictionaries with the all fields we want
+        Dict is nice so that we can easily look up instance KEEP-tags later.
+        """
+        print "Populating instances dictionary..."
         instances = Resource.get_all_instances()
         for i in instances:
-            self.spreadsheet.append(
-                dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
-                     PROD_tag=Resource.is_production(i), instance_type=i.instance_type, state=i.state,
-                     launched=i.launch_time, region=i.region.name))
+            self.spreadsheet[i.id] = dict(Name_tag=Resource.get_name_tag(i), id=i.id,
+                                             KEEP_tag=Resource.get_keep_tag(i), PROD_tag=Resource.is_production(i),
+                                             instance_type=i.instance_type, state=i.state, launched=i.launch_time,
+                                             region=i.region.name)
 
 
 def get_credentials():
@@ -136,16 +145,14 @@ def get_credentials():
 
 def generate_reports():
     generate_report(Vols.spreadsheet)
-    generate_reports(Snaps.spreadsheet)
-    generate_reports(Ins.spreadsheet)
-    generate_reports(Ims.spreadsheet)
+    generate_report(Snaps.spreadsheet)
+    generate_report(Ins.spreadsheet)
+    generate_report(Ims.spreadsheet)
 
 
 def main():
-    all_instances = Resource.get_all_instances()
     import pdb; pdb.set_trace()
     # generate_reports()
-
 
 if __name__ == '__main__':
     Ins = Resource('instance')
