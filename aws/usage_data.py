@@ -8,6 +8,8 @@ import os
 import sys
 import boto
 from boto import ec2
+from operator import itemgetter
+import csv
 
 # Name your output files
 volumes_data_output_file = "volumes.tsv"
@@ -244,17 +246,46 @@ class Resource(object):
                                           region=i.region.name, associated_volume=i.volume_id,
                                           volume_size=i.volume_size, description=i.description)
 
+def generate_volumes_report():
+    # sort it, well, this is messy, do I have to turn it into a list? Seems like it.
+    list_volumes = sorted(Vols.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region'))
+
+    # dump it to see what it looks like
+    print "Writing to file..."
+    with open("blob.csv", 'w') as f:
+        fields = ['Name', 'volume id', 'volume KEEP tag', 'instance KEEP tag', 'associated instance id', 'production?',
+                  'attachment state', 'volume state', 'status', 'iops', 'size', 'created', 'region']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in list_volumes:
+            writer.writerow({'Name': row['Name_tag'], 'volume id': row['id'], 'volume KEEP tag': row['KEEP_tag'],
+                             'instance KEEP tag': row['instance_KEEP_tag'],
+                             'associated instance id': row['associated_instance_id'], 'production?': row['PROD_tag'],
+                             'attachment state': row['attachment_state'], 'volume state': row['state'],
+                             'status': row['status'], 'iops': row['iops'], 'size': row['size'],
+                             'created': row['created'], 'region': row['region']})
+
+def generate_snapshots_report():
+    list_snapshots = sorted(Snaps.spreadsheet.values(), key=itemgetter('ami_KEEP_tag', 'KEEP_tag', 'region'))
+
+def generate_instances_report():
+    list_instances = sorted(Ins.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region'))
+
+def generate_images_report():
+    list_images = sorted(Ims.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region'))
 
 def generate_reports():
-    generate_report(Vols.spreadsheet)
-    generate_report(Snaps.spreadsheet)
-    generate_report(Ins.spreadsheet)
-    generate_report(Ims.spreadsheet)
+    """They got different fields and even some fields that should be the same have different names. :P"""
+    generate_volumes_report()
+    generate_snapshots_report()
+    generate_instances_report()
+    generate_images_report()
 
 
 def main():
-    import pdb; pdb.set_trace()
     # generate_reports()
+    # import pdb; pdb.set_trace()
+    generate_volumes_report()
     print "done"
 
 if __name__ == '__main__':
