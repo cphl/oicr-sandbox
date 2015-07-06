@@ -224,22 +224,6 @@ class Resource(object):
 
             ami_keep_tags = [Ims.spreadsheet[ami_id]['KEEP_tag'] for ami_id in associated_ami_ids]
 
-            # deal with none, single, or multi AMIs and their respective KEEP-tags, if existent
-            # TODO: this should be taken care of during output, not here. :( oh well! :D fix later!
-            if len(associated_ami_ids) == 1:
-                associated_ami_ids = associated_ami_ids[0]
-                ami_keep_tags = ami_keep_tags[0]
-            elif len(associated_ami_ids) == 0:
-                associated_ami_ids = "-------no-AMI-found"
-                ami_keep_tags = "-------no-AMI-found"
-            else:
-                amis = ""
-                keep_tags = ""
-                for ami_ids in associated_ami_ids:
-                    amis += ami_ids + " "
-                for keeps in ami_keep_tags:
-                    keep_tags += keeps + " "
-
             self.spreadsheet[i.id] = dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
                                           ami_KEEP_tag=ami_keep_tags, associated_ami_ids=associated_ami_ids,
                                           PROD_tag=Resource.is_production(i), start_time=i.start_time,
@@ -278,8 +262,24 @@ def generate_snapshots_report():
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for row in list_snapshots:
+
+            # deal with none, single, or multi AMIs and their respective KEEP-tags, if existent
+            associated_ami_ids = ""
+            ami_keep_tags = ""
+            if len(row['associated_ami_ids']) == 1:
+                associated_ami_ids = row['associated_ami_ids'][0]
+                ami_keep_tags = row['ami_KEEP_tag'][0]
+            elif len(row['associated_ami_ids']) == 0:
+                associated_ami_ids = "-------no-AMI-found"
+                ami_keep_tags = "-------no-AMI-found"
+            else:
+                for ami_ids in row['associated_ami_ids']:
+                    associated_ami_ids += ami_ids + " "
+                for keeps in row['ami_KEEP_tag']:
+                    ami_keep_tags += keeps + " "
+
             writer.writerow({'Name': row['Name_tag'], 'snapshot id': row['id'], 'snapshot KEEP tag': row['KEEP_tag'],
-                             'AMI KEEP tag': row['ami_KEEP_tag'], 'associated AMI id': row['associated_ami_ids'],
+                             'AMI KEEP tag': ami_keep_tags, 'associated AMI id': associated_ami_ids,
                              'production?': row['PROD_tag'], 'start time': row['start_time'], 'region': row['region'],
                              'associated volume': row['associated_volume'], 'volume size': row['volume_size'],
                              'description': row['description']})
@@ -312,17 +312,28 @@ def generate_images_report():
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for row in list_images:
+
+            # deal with none, single, or multi AMIs and their respective KEEP-tags, if existent
+            associated_snap_ids = ""
+            if len(row['associated_snapshots']) == 1:
+                associated_snap_ids = row['associated_snapshots'][0]
+            elif len(row['associated_snapshots']) == 0:
+                associated_snap_ids = "-------no-snapshots-found"
+            else:
+                for snap_id in row['associated_snapshots']:
+                    associated_snap_ids += snap_id + " "
+
             writer.writerow({'name': row['name'], 'alternative name': row['Name_tag'], 'image id': row['id'],
                              'KEEP tag': row['KEEP_tag'], 'production?': row['PROD_tag'], 'region': row['region'],
                              'created': row['created'],
-                             'associated snapshots': row['associated_snapshots'], 'description': row['description']})
+                             'associated snapshots': associated_snap_ids, 'description': row['description']})
 
 
 def main():
     # import pdb; pdb.set_trace()
-    generate_volumes_report()
-    generate_snapshots_report()
-    generate_instances_report()
+    # generate_volumes_report()
+    # generate_snapshots_report()
+    # generate_instances_report()
     generate_images_report()
     print "done"
 
