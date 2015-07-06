@@ -12,10 +12,10 @@ from operator import itemgetter
 import csv
 
 # Name your output files
-volumes_data_output_file = "volumes.tsv"
-snapshots_data_output_file = "snapshots.tsv"
-instances_data_output_file = "instances.tsv"
-images_data_output_file = "images.tsv"
+volumes_data_output_file = "volumes.csv"
+snapshots_data_output_file = "snapshots.csv"
+instances_data_output_file = "instances.csv"
+images_data_output_file = "images.csv"
 
 class Resource(object):
     def __init__(self, res_type):
@@ -164,7 +164,7 @@ class Resource(object):
 
     def populate_images(self):
         """Dict of dicts for images"""
-        print "Populating images dictionary..."
+        print "Populating images info..."
         images = Resource.get_all_images()
         for i in images:
 
@@ -179,7 +179,7 @@ class Resource(object):
 
     def populate_volumes(self):
         """Dictionary of dictionaries representing volumes"""
-        print "Populating volumes dictionary..."
+        print "Populating volumes info..."
         volumes = Resource.get_all_volumes()
         for i in volumes:
 
@@ -205,7 +205,7 @@ class Resource(object):
         """Make a dictionary of dictionaries with the all fields we want
         Dict is nice so that we can easily look up instance KEEP-tags later.
         """
-        print "Populating instances dictionary..."
+        print "Populating instances info..."
         instances = Resource.get_all_instances()
         for i in instances:
             self.spreadsheet[i.id] = dict(Name_tag=Resource.get_name_tag(i), id=i.id, KEEP_tag=Resource.get_keep_tag(i),
@@ -214,7 +214,7 @@ class Resource(object):
 
     def populate_snapshots(self):
         """Dict of dicts for snapshots"""
-        print "Populating snapshots dictionary..."
+        print "Populating snapshots info..."
         snapshots = Resource.get_all_snapshots()
 
         for i in snapshots:
@@ -248,11 +248,12 @@ class Resource(object):
 
 def generate_volumes_report():
     # sort it, well, this is messy, do I have to turn it into a list? Seems like it.
-    list_volumes = sorted(Vols.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region'))
+    list_volumes = sorted(Vols.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region',
+                                                                    'created'))
 
     # dump it to see what it looks like
     print "Writing to file..."
-    with open("blob.csv", 'w') as f:
+    with open(volumes_data_output_file, 'w') as f:
         fields = ['Name', 'volume id', 'volume KEEP tag', 'instance KEEP tag', 'associated instance id', 'production?',
                   'attachment state', 'volume state', 'status', 'iops', 'size', 'created', 'region']
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -266,26 +267,63 @@ def generate_volumes_report():
                              'created': row['created'], 'region': row['region']})
 
 def generate_snapshots_report():
-    list_snapshots = sorted(Snaps.spreadsheet.values(), key=itemgetter('ami_KEEP_tag', 'KEEP_tag', 'region'))
+    list_snapshots = sorted(Snaps.spreadsheet.values(), key=itemgetter('ami_KEEP_tag', 'KEEP_tag', 'region',
+                                                                       'start_time'))
+
+    # dump it to see what it looks like
+    print "Writing to file " + snapshots_data_output_file + "..."
+    with open(snapshots_data_output_file, 'w') as f:
+        fields = ['Name', 'snapshot id', 'snapshot KEEP tag', 'AMI KEEP tag', 'associated AMI id', 'production?',
+                  'start time', 'region', 'associated volume', 'volume size', 'description']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in list_snapshots:
+            writer.writerow({'Name': row['Name_tag'], 'snapshot id': row['id'], 'snapshot KEEP tag': row['KEEP_tag'],
+                             'AMI KEEP tag': row['ami_KEEP_tag'], 'associated AMI id': row['associated_ami_ids'],
+                             'production?': row['PROD_tag'], 'start time': row['start_time'], 'region': row['region'],
+                             'associated volume': row['associated_volume'], 'volume size': row['volume_size'],
+                             'description': row['description']})
+
 
 def generate_instances_report():
-    list_instances = sorted(Ins.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region'))
+    list_instances = sorted(Ins.spreadsheet.values(), key=itemgetter('KEEP_tag', 'region', 'launched'))
+
+    # dump it to see what it looks like
+    print "Writing to file " + instances_data_output_file + "..."
+    with open(instances_data_output_file, 'w') as f:
+        fields = ['Name', 'instance id', 'KEEP tag', 'production?', 'instance type', 'state', 'launched', 'region']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in list_instances:
+            writer.writerow({'Name': row['Name_tag'], 'instance id': row['id'], 'KEEP tag': row['KEEP_tag'],
+                             'production?': row['PROD_tag'], 'instance type': row['instance_type'],
+                             'state': row['state'], 'launched': row['launched'], 'region': row['region']})
+
+
 
 def generate_images_report():
-    list_images = sorted(Ims.spreadsheet.values(), key=itemgetter('instance_KEEP_tag', 'KEEP_tag', 'region'))
+    list_images = sorted(Ims.spreadsheet.values(), key=itemgetter('KEEP_tag', 'region', 'created'))
 
-def generate_reports():
-    """They got different fields and even some fields that should be the same have different names. :P"""
+    # dump it to see what it looks like
+    print "Writing to file " + images_data_output_file + "..."
+    with open(images_data_output_file, 'w') as f:
+        fields = ['name', 'alternative name', 'image id', 'KEEP tag', 'production?', 'region', 'created',
+                  'associated snapshots', 'description']
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for row in list_images:
+            writer.writerow({'name': row['name'], 'alternative name': row['Name_tag'], 'image id': row['id'],
+                             'KEEP tag': row['KEEP_tag'], 'production?': row['PROD_tag'], 'region': row['region'],
+                             'created': row['created'],
+                             'associated snapshots': row['associated_snapshots'], 'description': row['description']})
+
+
+def main():
+    # import pdb; pdb.set_trace()
     generate_volumes_report()
     generate_snapshots_report()
     generate_instances_report()
     generate_images_report()
-
-
-def main():
-    # generate_reports()
-    # import pdb; pdb.set_trace()
-    generate_volumes_report()
     print "done"
 
 if __name__ == '__main__':
