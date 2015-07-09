@@ -7,13 +7,14 @@ import zipfile
 import os
 import csv
 from operator import itemgetter
+import pdb
 
 class SpreadsheetCache(object):
     def __init__(self):
         self.filename = self.get_file_from_bucket()
         self.spreadsheet = []
-        with open(self.filename) as csvfile:
-            temp_reader = csv.DictReader(csvfile)
+        with open(self.filename) as f:
+            temp_reader = csv.DictReader(f)
             for row in temp_reader:
                 if float(row['Cost']) != 0 and row['RecordType'] == "LineItem":
                     if row['Operation'] == "" and row['UsageType'] == "":
@@ -56,7 +57,8 @@ class SpreadsheetCache(object):
         self.spreadsheet = list(temp_sheet)
         del temp_sheet
 
-    def get_file_from_bucket(self):
+    @staticmethod
+    def get_file_from_bucket():
         """Grab today's billing report from the S3 bucket, extract into pwd"""
         prefix = "794321122735-aws-billing-detailed-line-items-with-resources-and-tags-"
         csv_filename = prefix + str(datetime.date.today().isoformat()[0:7]) + ".csv"
@@ -206,7 +208,9 @@ def process_resource(line_items, res_id):
         if res_id in [x.id.encode() for x in SC.live_resources]:
             status = "confirmed live"
             if len(zone.strip()) == 0:  #if first pass bad, try here!
-                if [x for x in SC.live_resources if x['ResourceId'] == res_id][0].has_key['zone']:
+                pdb.set_trace()
+                # TypeError: 'Instance' object has no attribute '__getitem__'
+                if 'zone' in [x for x in SC.live_resources if x['ResourceId'] == res_id][0]:
                     zone = [x for x in SC.live_resources if x['ResourceId'] == res_id][0]['zone']
 
         with open(keeper + "_report.csv", 'a') as f:
