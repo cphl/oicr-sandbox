@@ -2,11 +2,12 @@
 __author__ = 'cleung'
 import boto
 import datetime
+import os
 
 # Filenames of reports to be uploaded
-reports = ['foo.csv', 'bar.csv']
-# reports = ['instances.csv', 'volumes.csv', 'snapshots.csv', 'images.csv', ]
-
+reports = []
+for root, dirs, files in os.walk('reports/'):
+    reports.extend(files)
 
 s3_connect = boto.connect_s3()
 
