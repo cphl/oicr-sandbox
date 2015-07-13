@@ -16,10 +16,10 @@ from operator import itemgetter
 import csv
 
 # Name your output files
-volumes_data_output_file = "volumes.csv"
-snapshots_data_output_file = "snapshots.csv"
-instances_data_output_file = "instances.csv"
-images_data_output_file = "images.csv"
+volumes_data_output_file = "/home/cleung/git-repos/oicr-sandbox/aws/reports/volumes.csv"
+snapshots_data_output_file = "/home/cleung/git-repos/oicr-sandbox/aws/reports/snapshots.csv"
+instances_data_output_file = "/home/cleung/git-repos/oicr-sandbox/aws/reports/instances.csv"
+images_data_output_file = "/home/cleung/git-repos/oicr-sandbox/aws/reports/images.csv"
 
 class Resource(object):
     def __init__(self, res_type):
