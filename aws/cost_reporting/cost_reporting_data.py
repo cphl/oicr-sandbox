@@ -237,7 +237,7 @@ def process_resource(line_items, res_id):
         #         if 'zone' in [x for x in SC.live_resources if x['ResourceId'] == res_id][0]:
         #             zone = [x for x in SC.live_resources if x['ResourceId'] == res_id][0]['zone']
 
-        with open(keeper + "_report.csv", 'a') as f:
+        with open("reports/" + keeper + "_report.csv", 'a') as f:
             fields = ['user:KEEP', 'ResourceId',  # 'Status, if available',
                       'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
             writer = csv.DictWriter(f, fieldnames=fields)
@@ -260,8 +260,9 @@ def process_prod_type(line_items):
         keeper = line_items[0].get('user:KEEP')
         if keeper == "":
             keeper = "untagged"
-        with open(keeper + "_report.csv", 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+        with open("reports/" + keeper + "_report.csv", 'a') as f:
+            fields = ['user:KEEP', 'ResourceId',  # 'Status, if available',
+                      'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'subtot': "Subtotal for resource " + resource, 'subval': cost_for_this_resource})
         cost_for_this_production_type += cost_for_this_resource
@@ -280,8 +281,9 @@ def generate_one_report(keeper):
 
     print "Generating report for: " + keeper + "..."
 
-    with open(report_name, 'w') as f:
-        fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
+    with open("reports/" + report_name, 'w') as f:
+        fields = ['user:KEEP', 'ResourceId',  # 'Status, if available',
+                  'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({})
         writer.writerow({'user:KEEP': "Report for " + keeper + " from start of month to " + str(datetime.date.today())})
@@ -292,8 +294,9 @@ def generate_one_report(keeper):
     for prod_type in prod_types:
         # list of all line_items with that prod type, and process them
         cost_for_this_production_type = process_prod_type([line_item for line_item in line_items if line_item['user:PROD'] == prod_type])
-        with open(report_name, 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+        with open("reports/" + report_name, 'a') as f:
+            fields = ['user:KEEP', 'ResourceId',  # 'Status, if available',
+                      'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({})
             writer.writerow({'subtot': "Subtotal for [non/]production:", 'subval': cost_for_this_production_type})
@@ -301,8 +304,9 @@ def generate_one_report(keeper):
         cost_for_keeper[prod_type] = cost_for_this_production_type
 
     # K this is ugly but figure it out later
-    with open(report_name, 'a') as f:
-        fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
+    with open("reports/" + report_name, 'a') as f:
+        fields = ['user:KEEP', 'ResourceId',  # 'Status, if available',
+                  'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost', 'subtot', 'subval']
         writer = csv.DictWriter(f, fieldnames=fields)
         total_cost_for_keeper = sum(cost_for_keeper.values())
         writer.writerow({'subtot': "TOTAL FOR " + keeper, 'subval': str(total_cost_for_keeper)})
@@ -315,12 +319,13 @@ def generate_untagged_overview():
     print "Generating untagged overview report..."
     unkept = [x for x in SC.spreadsheet if len(x['user:KEEP'].strip()) == 0]
 
-    with open("untagged_sorted_reports.csv", 'w') as f:
+    with open("reports/untagged_sorted_reports.csv", 'w') as f:
 
         # costs by resource
         print " ...by resource..."
         resource_ids = set([x.get('ResourceId') for x in unkept])
-        fields = ['ProductName', 'ResourceId', 'Resource Status (unknown unless available)', 'Total cost for resource']
+        fields = ['ProductName', 'ResourceId',  # 'Resource Status (unknown unless available)',
+                  'Total cost for resource']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({'ProductName': "Untagged resources from start of month to " + str(datetime.date.today())})
         writer.writerow({})
@@ -425,7 +430,7 @@ def generate_reports():
 
     # Summarize
     print "Generating summary report..."
-    with open('overall_keep+prod_summary.csv', 'w') as f:
+    with open('reports/overall_keep+prod_summary.csv', 'w') as f:
         fields = ['user:KEEP', 'non-production subtotal', 'production subtotal', 'user total']
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writerow({'user:KEEP': "Summary of costs from start of month to " + str(datetime.date.today())})
