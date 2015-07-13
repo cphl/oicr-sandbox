@@ -9,9 +9,12 @@ import csv
 from operator import itemgetter
 import pdb
 
+
 class SpreadsheetCache(object):
     def __init__(self):
-        self.filename = self.get_file_from_bucket()
+        # self.filename = self.get_file_from_bucket()
+        self.filename = "794321122735-aws-billing-detailed-line-items-with-resources-and-tags-2015-06.csv"  # to test
+
         self.spreadsheet = []
         with open(self.filename) as f:
             temp_reader = csv.DictReader(f)
@@ -24,6 +27,12 @@ class SpreadsheetCache(object):
             del temp_reader
 
         self.fix_case()
+        # sorting the data, gives Brian's i-4509e4a3 to Denis. WHY? Go back to last working version _cache, I think
+        # but not sorting it still doesn't collect all the resources it should have. BECAUSE SOME RE-TAGGED AS DENIS!
+        # AHA! It's because the dictionary of resources + tags get populated differently.
+        #  keys are unique, so resources that had different owners at different times will be treated according to
+        #  last dictionary write
+        # I need to incorporate date of tagging to the tag dictionary
         self.sort_data()
 
         temp_keepers = set()
@@ -37,11 +46,11 @@ class SpreadsheetCache(object):
         self.tag_past_items()
 
         regions = self.get_regions()
-        self.live_resources = []
-        for region in regions:
-            self.live_resources.extend(self.get_instances(region))
-            self.live_resources.extend(self.get_volumes(region))
-            # detailed billing report from Amazon does not show snapshot or image IDs :(
+        # self.live_resources = []
+        # for region in regions:
+        #     self.live_resources.extend(self.get_instances(region))
+        #     self.live_resources.extend(self.get_volumes(region))
+        #     # detailed billing report from Amazon does not show snapshot or image IDs :(
 
     def data(self):
         """Returns spreadsheet (list of dicts)"""
@@ -59,7 +68,7 @@ class SpreadsheetCache(object):
 
     @staticmethod
     def get_file_from_bucket():
-        """Grab today's billing report from the S3 bucket, extract into pwd"""
+        """Grab today's billing report from the S3 bucket, extract into pwd, return filename"""
         prefix = "794321122735-aws-billing-detailed-line-items-with-resources-and-tags-"
         csv_filename = prefix + str(datetime.date.today().isoformat()[0:7]) + ".csv"
         zip_filename = csv_filename + ".zip"
@@ -76,7 +85,6 @@ class SpreadsheetCache(object):
             zf.extractall()
         return csv_filename
 
-################### This changes cost totals, but I don't know why. Suggests a problem in calculations though
     def sort_data(self):
         """Sort data by ResourceId, KEEP, PROD, Operation, UsageType, Cost"""
         temp_sheet = list(self.spreadsheet)
@@ -85,17 +93,22 @@ class SpreadsheetCache(object):
         del temp_sheet
 
     def get_resource_tags(self):
-        """Modifies (populates) dict of resource_id and {KEEP-tag, PROD-tag}-pairs"""
+        """Modifies (populates) dict of resource_id and {KEEP-tag, PROD-tag}-pairs
+        v2: Some tags changed over time for a given resource. Retain most recent tag for the dictionary.
+        """
         for row in self.spreadsheet:
             if row['ResourceId'] not in self.resources_tag_dict:
                 self.resources_tag_dict[row['ResourceId']] = {'user:KEEP': row['user:KEEP'],
-                                                              'user:PROD': row['user:PROD']}
-            if len(row['user:KEEP'].strip()) != 0:
+                                                              'user:PROD': row['user:PROD'],
+                                                              'age': SpreadsheetCache.get_time_comparator(row)}
+            if len(row['user:KEEP'].strip()) != 0\
+                    and SpreadsheetCache.get_time_comparator(row) > self.resources_tag_dict[row['ResourceId']]['age']:
                 self.resources_tag_dict[row['ResourceId']]['user:KEEP'] = row['user:KEEP']
+                self.resources_tag_dict[row['ResourceId']]['age'] = self.get_time_comparator(row)
             if len(row['user:PROD'].strip()) != 0:
                 self.resources_tag_dict[row['ResourceId']]['user:PROD'] = row['user:PROD']
 
-########### NOT running this will give the same totals as raw data
+########### NOT running this will give the same totals as raw data (so we know upstream/non-dependent code is ok)
     def tag_past_items(self):
         """Tag untagged items if they became tagged at any time in the billing record"""
         copy_list = list(self.spreadsheet)
@@ -109,16 +122,33 @@ class SpreadsheetCache(object):
         self.spreadsheet = list(copy_list)
         del copy_list
 
-    def get_regions(self):
+    @staticmethod
+    def get_regions():
         regions = ec2.regions()
         region_names = []
         for region in regions:
             region_names.append(region.name)
         return region_names
 
-    def credentials(self):
+    @staticmethod
+    def credentials():
         return {"aws_access_key_id": os.environ['AWS_ACCESS_KEY'],
                 "aws_secret_access_key": os.environ['AWS_SECRET_KEY']}
+
+    @staticmethod
+    def get_time_comparator(line_item):
+        """Return hours since start of month. Use for comparing time of tagging. Easier than datetime module.
+        UsageStartDate entries in billing report are in format '2015-06-08 18:00:00'
+        """
+        hours = 0
+        try:
+            date_time = line_item['UsageStartDate']
+            day = int(date_time[8:10])
+            hour = int(date_time[11:13])
+            hours = day*24 + hour
+        except KeyError:
+            pass
+        return hours
 
     def get_instances(self, region):
         """Return names only"""
@@ -163,6 +193,7 @@ class SpreadsheetCache(object):
             return []
         return images
 
+
 def print_data():
     """Dump everything to take a look"""
     with open("blob.csv", 'w') as f:
@@ -176,6 +207,7 @@ def print_data():
                              'UsageType': row['UsageType'],
                              'Production?': row['user:PROD'],
                              'Cost': row['Cost']})
+
 
 def subtotal(line_items):
     """ Returns subtotal for line_items.
@@ -204,20 +236,22 @@ def process_resource(line_items, res_id):
         zones.reverse()
         zone = zones[0]  # first: low quality pass
 
-        status = ""
-        if res_id in [x.id.encode() for x in SC.live_resources]:
-            status = "confirmed live"
-            if len(zone.strip()) == 0:  #if first pass bad, try here!
-                pdb.set_trace()
-                # TypeError: 'Instance' object has no attribute '__getitem__'
-                if 'zone' in [x for x in SC.live_resources if x['ResourceId'] == res_id][0]:
-                    zone = [x for x in SC.live_resources if x['ResourceId'] == res_id][0]['zone']
+        # status = ""
+        # if res_id in [x.id.encode() for x in SC.live_resources]:
+        #     status = "confirmed live"
+        #     if len(zone.strip()) == 0:  #if first pass bad, try here!
+        #         pdb.set_trace()
+        #         # TypeError: 'Instance' object has no attribute '__getitem__'
+        #         if 'zone' in [x for x in SC.live_resources if x['ResourceId'] == res_id][0]:
+        #             zone = [x for x in SC.live_resources if x['ResourceId'] == res_id][0]['zone']
 
         with open(keeper + "_report.csv", 'a') as f:
-            fields = ['user:KEEP', 'ResourceId', 'Status, if available', 'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
+            fields = ['user:KEEP', 'ResourceId',  # 'Status, if available',
+                      'AvailabilityZone', 'Operation', 'UsageType', 'Production?', 'Cost']
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writerow({'user:KEEP': keeper, 'ResourceId': res_id,
-                             'Status, if available': status,'AvailabilityZone': zone,
+                             # 'Status, if available': status,
+                             'AvailabilityZone': zone,
                              'Operation': line_items[0]['Operation'], 'UsageType': usage_type,
                              'Production?': line_items[0]['user:PROD'], 'Cost': usage_cost})
         cost_for_this_resource += usage_cost
@@ -313,14 +347,17 @@ def generate_untagged_overview():
             else:
                 product = str(product)
 
-            status = ""
-            if resource in SC.live_resources:
-                status = "confirmed live"
+            # status = ""
+            # if resource in SC.live_resources:
+            #     status = "confirmed live"
 
-            list_of_resources.append(dict(p=product, r=resource, s=status, c=resource_total))
+            list_of_resources.append(dict(p=product, r=resource,
+                                          # s=status,
+                                          c=resource_total))
         list_of_resources = sorted(list_of_resources, key=itemgetter('p', 'c'), reverse=True)
         for res in list_of_resources:
-            writer.writerow({'ProductName': res['p'], 'ResourceId': res['r'], 'Resource Status (unknown unless available)': res['s'],
+            writer.writerow({'ProductName': res['p'], 'ResourceId': res['r'],
+                             # 'Resource Status (unknown unless available)': res['s'],
                              'Total cost for resource': res['c']})
 
         # costs by operation
@@ -419,11 +456,13 @@ def generate_reports():
 
 
 def main():
-    print_data()
+    # print_data()  # prints blob of data
 
     # import pdb; pdb.set_trace()
-    generate_one_report('DENIS')
-    # generate_reports()
+    # generate_one_report('ADAM')
+    # generate_one_report('BRIAN')
+    # generate_one_report('DENIS')
+    generate_reports()
 
 if __name__ == '__main__':
     SC = SpreadsheetCache()
