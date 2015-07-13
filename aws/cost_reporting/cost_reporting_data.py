@@ -12,8 +12,7 @@ import pdb
 
 class SpreadsheetCache(object):
     def __init__(self):
-        # self.filename = self.get_file_from_bucket()
-        self.filename = "794321122735-aws-billing-detailed-line-items-with-resources-and-tags-2015-06.csv"  # to test
+        self.filename = self.get_file_from_bucket()
 
         self.spreadsheet = []
         with open(self.filename) as f:
@@ -27,12 +26,6 @@ class SpreadsheetCache(object):
             del temp_reader
 
         self.fix_case()
-        # sorting the data, gives Brian's i-4509e4a3 to Denis. WHY? Go back to last working version _cache, I think
-        # but not sorting it still doesn't collect all the resources it should have. BECAUSE SOME RE-TAGGED AS DENIS!
-        # AHA! It's because the dictionary of resources + tags get populated differently.
-        #  keys are unique, so resources that had different owners at different times will be treated according to
-        #  last dictionary write
-        # I need to incorporate date of tagging to the tag dictionary
         self.sort_data()
 
         temp_keepers = set()
@@ -45,7 +38,7 @@ class SpreadsheetCache(object):
         self.get_resource_tags()  # populate above dictionary
         self.tag_past_items()
 
-        regions = self.get_regions()
+        # regions = self.get_regions()
         # self.live_resources = []
         # for region in regions:
         #     self.live_resources.extend(self.get_instances(region))
@@ -108,7 +101,6 @@ class SpreadsheetCache(object):
             if len(row['user:PROD'].strip()) != 0:
                 self.resources_tag_dict[row['ResourceId']]['user:PROD'] = row['user:PROD']
 
-########### NOT running this will give the same totals as raw data (so we know upstream/non-dependent code is ok)
     def tag_past_items(self):
         """Tag untagged items if they became tagged at any time in the billing record"""
         copy_list = list(self.spreadsheet)
