@@ -2,6 +2,7 @@ __author__ = 'cleung'
 
 import boto
 from boto import ec2
+from boto.s3.connection import S3Connection
 import datetime
 import zipfile
 import os
@@ -68,7 +69,7 @@ class SpreadsheetCache(object):
         # If local data is older than 1 day, download fresh data.
         # mod_time = os.path.getmtime(csv_filename)
         if not os.path.isfile(csv_filename) or datetime.date.today() - datetime.date.fromtimestamp(os.path.getmtime(csv_filename)) > datetime.timedelta(days=0):
-            conn = boto.connect_s3()
+            conn = S3Connection()
             mybucket = conn.get_bucket('oicr.detailed.billing')
             print "Downloading " + zip_filename + "..."
             mykey = mybucket.get_key(zip_filename)
