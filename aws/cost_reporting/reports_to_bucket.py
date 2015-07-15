@@ -9,7 +9,7 @@ reports = []
 for root, dirs, files in os.walk('reports/'):
     reports.extend(files)
 
-s3_connect = boto.connect_s3()
+s3_connect = boto.connect_s3(os.environ['AWS_ACCESS_KEY'], os.environ['AWS_SECRET_KEY'])
 
 dst_bucket = s3_connect.get_bucket("oicr.detailed.billing")
 my_key = boto.s3.key.Key(dst_bucket)
